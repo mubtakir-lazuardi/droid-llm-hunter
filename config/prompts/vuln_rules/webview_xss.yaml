@@ -1,0 +1,16 @@
+name: "WebView XSS"
+description: "Detects potential Cross-Site Scripting (XSS) vulnerabilities in WebViews."
+prompt: |
+  Analyze the following Java code snippet for WebView XSS vulnerabilities.
+  Look for WebViews where JavaScript is enabled (`setJavaScriptEnabled(true)`) and untrusted content is loaded via `loadUrl` or `loadData`.
+
+  Code:
+  ```java
+  {code_snippet}
+  ```
+
+  Context:
+  - File Path: {file_path}
+
+  Is there a potential XSS vulnerability in this WebView implementation? If yes, explain the risk and recommend mitigation strategies like disabling JavaScript if not needed, or sanitizing input.
+tags: ["webview", "xss", "javascript"]

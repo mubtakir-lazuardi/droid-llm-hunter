@@ -1,0 +1,47 @@
+# Droid-LLM-Hunter Settings
+
+# LLM Configuration
+llm:
+  provider: "ollama"  # or "gemini" or "groq" or "openai"
+  model: "llama3:8b" # default model for ollama or "deepseek-coder-v2:16b"
+  api_key: "GEMINI_API_KEY" # Replace with your Gemini API key
+  ollama_url: "http://localhost:11434"
+  gemini_model: "gemini-2.0-flash" # default model for gemini or "gemini-2.5-pro"
+  groq_model: "llama-3.1-8b-instant" # default model for groq or "qwen/qwen3-32b"
+  groq_api_key: "GROQ_API_KEY" # Replace with your Groq API key
+  openai_model: "gpt-4-turbo" # default model for openai or "gpt-5.2"
+  openai_api_key: "OPENAI_API_KEY" # Replace with your OpenAI API key
+
+# Apktool Configuration
+apktool:
+  path: "apktool" # Optional: if not in system PATH
+
+# JADX Configuration
+jadx:
+  path: "/opt/jadx/bin/jadx" # Absolute path since it might not be in PATH
+
+# Advanced Analysis Settings
+analysis:
+  generate_attack_surface_map: false # Generate Attack Surface Map
+  use_cross_reference_context: true # Use Cross Reference Context
+  filter_mode: "hybrid" # static_only, llm_only, hybrid
+  decompiler_mode: "apktool" # Options: apktool (default), jadx, hybrid
+
+# Analysis Rules
+# Enable or disable specific vulnerability checks
+rules:
+  sql_injection: false
+  webview_xss: false
+  hardcoded_secrets: false
+  webview_deeplink: true
+  insecure_file_permissions: false
+  intent_spoofing: false
+  insecure_random_number_generation: false
+  jetpack_compose_security: false
+  biometric_bypass: false
+  graphql_injection: false
+  exported_components: false
+  deeplink_hijack: false
+  insecure_storage: false
+  path_traversal: false
+  insecure_webview: false

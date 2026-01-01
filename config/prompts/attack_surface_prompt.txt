@@ -1,0 +1,13 @@
+Based on the following AndroidManifest.xml file and the summaries of the application's code, please generate an attack surface map for the application.
+The attack surface map should be a list of all the points where an attacker can try to enter data or extract data from the application.
+Focus on exported components, deep links, network communication, file I/O, and user input.
+
+AndroidManifest.xml:
+```xml
+{manifest}
+```
+
+Code Summaries:
+```
+{summaries}
+```

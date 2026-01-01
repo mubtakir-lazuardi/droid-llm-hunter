@@ -1,0 +1,14 @@
+Summarize the functionality of the following smali code snippet in a single sentence.
+Focus on the high-level purpose AND explicitly highlight operations related to OWASP MASVS categories:
+1. MASVS-STORAGE: File I/O, SharedPreferences, Database (SQL/Room).
+2. MASVS-CRYPTO: Encryption, Decryption, Hashing, Key Management.
+3. MASVS-AUTH: Login, Tokens, Permissions, Session Management.
+4. MASVS-NETWORK: HTTP Requests, APIs, Sockets, WebView.
+5. MASVS-PLATFORM: Intents, IPC, Content Providers, Broadcasts.
+6. MASVS-CODE: Dynamic Code Loading, Reflection, Native Code (JNI).
+7. MASVS-PRIVACY: Accessing Contacts, Location, Camera, or PII.
+
+Code:
+```smali
+{code_snippet}
+```

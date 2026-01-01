@@ -1,0 +1,6 @@
+typer
+loguru
+pyyaml
+pydantic
+langchain
+requests

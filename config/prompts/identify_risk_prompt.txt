@@ -1,0 +1,16 @@
+Analyze the following code summary and determine if it describes a functionality that is a potential security risk.
+Respond with "Yes" if it is a potential security risk, and "No" otherwise.
+
+A potential security risk is present if the summary mentions ANY of the following OWASP MASVS categories:
+- MASVS-STORAGE
+- MASVS-CRYPTO
+- MASVS-AUTH
+- MASVS-NETWORK
+- MASVS-PLATFORM
+- MASVS-CODE
+- MASVS-PRIVACY
+
+Or if it describes ANY handling of user input, file I/O, network communication, cryptography, authentication, authorization, or sensitive data.
+
+Summary:
+{code_snippet}

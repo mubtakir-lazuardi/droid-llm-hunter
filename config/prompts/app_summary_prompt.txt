@@ -1,0 +1,16 @@
+Based on the following AndroidManifest.xml file and the summaries of the application's code, please provide a comprehensive summary of the application's capabilities.
+Focus on the main capabilities of the app, specifically calling out:
+- **Core Functionality**: What does the app do? (e.g. Banking, Social Media).
+- **Security Features**: Authentication methods (Biometric, PIN), cryptography usage.
+- **Data Handling**: What sensitive data is collected/stored?
+- **Permissions**: Notable dangerous permissions (Location, Contacts, SMS).
+
+AndroidManifest.xml:
+```xml
+{manifest}
+```
+
+Code Summaries:
+```
+{summaries}
+```
