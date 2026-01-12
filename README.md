@@ -85,7 +85,7 @@ It supports **Hybrid Decompilation** (Smali/Java), **Context-Aware Analysis** (C
 *   **🕸️ Context-Aware Scanning:** Utilizes a **Call Graph** to understand file dependencies. Use Cross-Reference Context to let the AI know *who* calls a function and with *what* arguments. [Read the Docs](CROSS_REFERENCE_CONTEXT.md)
 *   **⚔️ Attack Surface Mapper:** Combines **Manifest Structure** (Exported components) with **Code Logic** (AI Summaries) to identify high-risk entry points (e.g., specific activities processing unvalidated URLs). [Read the Docs](Attack_Surface_Mapper.md)
 *   **📚 RAG with OWASP MASVS:** Every finding is automatically enriched with the relevant **OWASP Mobile Application Security Verification Standard (MASVS)** ID (e.g., `MASVS-STORAGE-1`), making your reports audit-ready instantly.
-*   **🤖 Multi-Provider Support:** Run locally with **Ollama** (free & private) or scale up with **Gemini**, **Groq**, and **OpenAI**.
+*   **🤖 Multi-Provider Support:** Run locally with **Ollama** (free & private) or scale up with **Gemini**, **Groq**, **OpenAI** and **Anthropic**.
 *   **📊 Structured Security Reports:** Get detailed JSON output containing severity, confidence scores, evidence snippets, and even an "Attack Surface Map" of the application.
 
 ## Scan Workflow
@@ -194,6 +194,7 @@ Droid LLM Hunter supports the following LLM providers:
 *   **Gemini:** Google's family of generative AI models.
 *   **Groq:** A high-performance inference engine for LLMs.
 *   **OpenAI:** OpenAI's family of generative AI models.
+*   **Anthropic:** Claude's family of generative AI models.
 
 ## Available Rules
 
@@ -444,7 +445,7 @@ Droid LLM Hunter complements, rather than replaces, traditional SAST. Traditiona
 <summary>Why Performance scan APK slow ?</summary>
 
 **Note on Performance:** The speed of the analysis also heavily depends on:
-*   **The LLM Provider/Model:** Local models (Ollama) depend on hardware (GPU/CPU). Cloud models (Groq/Gemini/OpenAI) are generally faster but depend on network latency.
+*   **The LLM Provider/Model:** Local models (Ollama) depend on hardware (GPU/CPU). Cloud models (Groq/Gemini/OpenAI/Anthropic) are generally faster but depend on network latency.
 *   **Active Rules:** Enabling more rules increases the number of queries sent to the LLM.
 *   **Context Injection:** Using Cross-Reference Context (Call Graph) adds more data to process, slightly increasing analysis time for better accuracy.
 </details>

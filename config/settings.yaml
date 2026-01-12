@@ -2,7 +2,7 @@
 
 # LLM Configuration
 llm:
-  provider: "ollama"  # or "gemini" or "groq" or "openai"
+  provider: "ollama"  # or "gemini" or "groq" or "openai" or "anthropic"
   model: "llama3:8b" # default model for ollama or "deepseek-coder-v2:16b"
   api_key: "GEMINI_API_KEY" # Replace with your Gemini API key
   ollama_url: "http://localhost:11434"
@@ -11,6 +11,8 @@ llm:
   groq_api_key: "GROQ_API_KEY" # Replace with your Groq API key
   openai_model: "gpt-4-turbo" # default model for openai or "gpt-5.2"
   openai_api_key: "OPENAI_API_KEY" # Replace with your OpenAI API key
+  anthropic_model: "claude-sonnet-4-20250514" # default model for anthropic or "claude-sonnet-4-5-20250929"
+  anthropic_api_key: "ANTHROPIC_API_KEY" # Replace with your Anthropic API key
 
 # Apktool Configuration
 apktool:
