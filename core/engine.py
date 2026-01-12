@@ -7,6 +7,7 @@ from modules.llm_client.ollama import OllamaClient
 from modules.llm_client.gemini import GeminiClient
 from modules.llm_client.groq import GroqClient
 from modules.llm_client.openai import OpenAIClient
+from modules.llm_client.anthropic import AnthropicClient
 from core.call_graph import CallGraphBuilder
 import os
 import yaml
@@ -49,6 +50,8 @@ class Engine:
             return GroqClient(model=self.settings.llm.groq_model, api_key=self.settings.llm.groq_api_key)
         elif self.settings.llm.provider == "openai":
             return OpenAIClient(model=self.settings.llm.openai_model, api_key=self.settings.llm.openai_api_key)
+        elif self.settings.llm.provider == "anthropic":
+            return AnthropicClient(model=self.settings.llm.anthropic_model, api_key=self.settings.llm.anthropic_api_key)
         else:
             raise ValueError(f"Unsupported LLM provider: {self.settings.llm.provider}")
 
