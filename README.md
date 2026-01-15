@@ -76,14 +76,14 @@ It supports **Hybrid Decompilation** (Smali/Java), **Context-Aware Analysis** (C
 ## Features
 
 *   **🧠 Intelligent Analysis Engine:** Droid LLM Hunter goes beyond regex. It breaks down code into chunks, summarizes functionality, and understands context before flagging vulnerabilities, significantly reducing false positives compared to traditional tools.
-*   **⭐ Staged Prompt Architecture:** Uses a specialized pipeline of prompts (Summarization -> Filtering -> Deep Scan) to ensure consistent reasoning and reduce hallucination. [Read the Docs](Prompt-Explanation.md)
+*   **⭐ Staged Prompt Architecture:** Uses a specialized pipeline of prompts (Summarization -> Filtering -> Deep Scan) to ensure consistent reasoning and reduce hallucination. [Read the Docs](PROMPT-EXPLANATION.md)
 *   **🔍 Hybrid Filter Modes:** Choose your strategy!
     *   **`llm_only`:** Maximum accuracy using pure AI analysis.
     *   **`static_only`:** Blazing fast keyword scanning.
     *   **`hybrid`:** The best of both worlds Static keywords filter the noise, AI verifies the danger.
 *   **🛠️ Flexible Configuration:** a simple yet powerful configuration file (`config/settings.yaml`) allows for easy management of LLM providers, models, rules, and **Decompiler Settings** (Apktool/JADX).
 *   **🕸️ Context-Aware Scanning:** Utilizes a **Call Graph** to understand file dependencies. Use Cross-Reference Context to let the AI know *who* calls a function and with *what* arguments. [Read the Docs](CROSS_REFERENCE_CONTEXT.md)
-*   **⚔️ Attack Surface Mapper:** Combines **Manifest Structure** (Exported components) with **Code Logic** (AI Summaries) to identify high-risk entry points (e.g., specific activities processing unvalidated URLs). [Read the Docs](Attack_Surface_Mapper.md)
+*   **⚔️ Attack Surface Mapper:** Combines **Manifest Structure** (Exported components) with **Code Logic** (AI Summaries) to identify high-risk entry points (e.g., specific activities processing unvalidated URLs). [Read the Docs](ATTACK_SURFACE_MAPPER.md)
 *   **📚 RAG with OWASP MASVS:** Every finding is automatically enriched with the relevant **OWASP Mobile Application Security Verification Standard (MASVS)** ID (e.g., `MASVS-STORAGE-1`), making your reports audit-ready instantly.
 *   **🤖 Multi-Provider Support:** Run locally with **Ollama** (free & private) or scale up with **Gemini**, **Groq**, **OpenAI** and **Anthropic**.
 *   **📊 Structured Security Reports:** Get detailed JSON output containing severity, confidence scores, evidence snippets, and even an "Attack Surface Map" of the application.
@@ -324,6 +324,40 @@ jadx:
   path: "/opt/jadx/bin/jadx"
 ```
 
+## Docker Installation
+Running Droid LLM Hunter via Docker ensures all dependencies (Java, Python, Apktool) are correctly configured.
+
+### 1. Build Image
+```bash
+docker build -t dlh .
+```
+
+### 2. Run Scan
+Mount the volume to access input files and save output results.
+```bash
+# Syntax: docker run -v [HOST_DIR]:/app/output dlh scan [APK_FILE]
+
+# Example (Assuming APK is in the 'output' folder of current directory):
+docker run --rm -v $(pwd)/output:/app/output dlh scan [APK_FILE]
+```
+
+### 3. Run with Flags
+```bash
+docker run --rm -v $(pwd)/output:/app/output dlh -v scan [APK_FILE]
+```
+
+### 4. Custom Configuration (Live Editing)
+To edit `settings.yaml` without rebuilding the image, mount the local configuration file:
+```bash
+docker run --rm \
+  -v $(pwd)/output:/app/output \
+  -v $(pwd)/config/settings.yaml:/app/config/settings.yaml \
+  dlh scan [APK_FILE]
+```
+*Changes made to `config/settings.yaml` on the host machine will immediately apply to the scan.*
+
+---
+
 ## Usage
 
 ```bash
@@ -411,8 +445,9 @@ python dlh.py scan [APK file]
 
 This document outlines the future development plans for the Droid-LLM-Hunter.
 
-*   **CI/CD Integration (`v1.1`):** Official Docker support and GitHub/GitLab templates for automated security scanning in DevOps pipeline.
-*   **AI-Powered Dynamic Analysis (`v2.0`):** Integration with **Frida & ADB** to verify static findings by running the app and simulating attacks (e.g., Reflection/IPC tracing, Intent Fuzzing). This directly addresses the limitations of static analysis regarding **Dynamic Dispatch** and **JNI**.
+*   **AI-Powered Dynamic Analysis (`v2.0`):** Integration with **Frida & ADB** to verify static findings by running the app and simulating attacks (e.g., Reflection/IPC tracing, Intent Fuzzing). This directly addresses the limitations of static analysis regarding 
+*   **CI/CD Integration :** GitHub/GitLab templates for automated security scanning in DevOps pipeline.
+**Dynamic Dispatch** and **JNI**.
 *   **Taint Analysis Engine:** Implementation of a lightweight Trace Engine (or FlowDroid integration) to map **Source-to-Sink** data paths, verifying if inputs are properly sanitized before reaching sensitive functions.
 *   **De-obfuscation Support:** Support for mapping files (Proguard) and AI-based variable renaming to handle **Obfuscated Applications** and improve Call Graph accuracy.
 *   **Auto-Patching:** Generating secure code fixes or `.diff` patches to automatically resolve identified vulnerabilities.
