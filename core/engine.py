@@ -9,6 +9,7 @@ from modules.llm_client.groq import GroqClient
 from modules.llm_client.openai import OpenAIClient
 from modules.llm_client.anthropic import AnthropicClient
 from core.call_graph import CallGraphBuilder
+from core.manifest_parser import ManifestParser
 import os
 import yaml
 import concurrent.futures
@@ -64,66 +65,110 @@ class Engine:
             return "Vulnerable"
         return "Not Vulnerable"
 
+    def _find_manifest_path(self, start_path: str) -> str:
+        """Traverses up the directory tree to find AndroidManifest.xml."""
+        current_dir = os.path.dirname(os.path.abspath(start_path))
+        while current_dir != "/" and current_dir != "":
+            manifest = os.path.join(current_dir, "AndroidManifest.xml")
+            if os.path.exists(manifest):
+                return manifest
+            parent = os.path.dirname(current_dir)
+            if parent == current_dir: break
+            current_dir = parent
+        return ""
+
+    def _get_class_name(self, file_path: str) -> str:
+        """Derives class name from file path for Manifest matching."""
+        parts = file_path.replace("\\", "/").split("/")
+        filename = parts[-1]
+        name, _ = os.path.splitext(filename)
+        
+        # Try to reconstruct package from path (simple heuristic)
+        # Stop at common root markers
+        package_parts = [name]
+        for part in reversed(parts[:-1]):
+            if part in ["smali", "java", "src", "main", "decompiled"]:
+                break
+            package_parts.insert(0, part)
+        
+        return ".".join(package_parts)
+
     def _generate_poc(self, file_path: str, code_snippet: str, vuln_description: str, rule_name: str):
         """Generates a PoC script for a confirmed vulnerability."""
         try:
+            # [NEW] Manifest Context Injection
+            manifest_context = "Manifest not found or Context Injection disabled."
+            if self.settings.analysis.use_cross_reference_context: # Reuse context flag or always on? User asked for accuracy.
+                manifest_path = self._find_manifest_path(file_path)
+                if manifest_path:
+                    parser = ManifestParser(manifest_path)
+                    class_name = self._get_class_name(file_path)
+                    details = parser.get_component_details(class_name)
+                    if details and details.get("context_str"):
+                        manifest_context = details["context_str"]
+                        log.info(f"Injecting Manifest Context for {class_name}")
+
+            # [NEW] Hardcoded Secrets "Auto-Fill"
+            # We use a temporary CodeFilter instance to reuse its regex logic, or the main one if available.
+            # Since CodeFilter need decompiled_dir, we can pass a dummy one if we just use extract_secrets(content).
+            detected_secrets_str = "None detected."
+            try:
+                # Assuming CodeFilter is imported. We can use a lightweight instance or static method if refactored.
+                # But extract_secrets is an instance method.
+                # Let's instantiate it with a dummy path since we only process the snippet string here.
+                temp_filter = CodeFilter(decompiled_dir="/tmp", mode="java") 
+                secrets = temp_filter.extract_secrets(code_snippet)
+                if secrets:
+                    detected_secrets_str = ""
+                    for s in secrets:
+                        detected_secrets_str += f"- {s['type']}: \"{s['value']}\"\n"
+                    log.info(f"Injecting {len(secrets)} detected secrets into prompt.")
+            except Exception as e:
+                log.warning(f"Secret extraction failed: {e}")
+
+            # [LOGIC GUARD] Skip exploit generation if "Hardcoded Secrets" is the issue but Regex found nothing.
+            if rule_name == "Hardcoded Secrets" and detected_secrets_str == "None detected.":
+                log.warning(f"Skipping exploit generation for {os.path.basename(file_path)}: Vulnerability is 'Hardcoded Secrets' but no actual secrets extracted by Regex.")
+                return "" # Return empty string to signal skip
+
             with open("config/prompts/exploit_prompt.txt", "r") as f:
                 prompt_template = f.read()
             
             prompt = prompt_template.replace("{vulnerability_description}", vuln_description)
             prompt = prompt.replace("{file_path}", file_path)
-            prompt = prompt.replace("{code_snippet}", code_snippet[:8000]) # Truncate to fit context if needed
+            prompt = prompt.replace("{manifest_context}", manifest_context) # Inject Manifest
+            prompt = prompt.replace("{detected_secrets}", detected_secrets_str) # Inject Secrets
+            prompt = prompt.replace("{code_snippet}", code_snippet[:8000]) 
+
             
             log.info(f"Generating PoC for {rule_name} in {os.path.basename(file_path)}...")
             
-            # We use a dummy context as this prompt is self-contained
-            # We might strictly need 'system_prompt', but the exploit prompt is designed to be standalone-ish
-            # However, BaseLLMClient might expect a certain context structure.
-            # Let's check anthropic.py wrapper. base.py uses context.get("system_prompt") + context.get("vuln_prompt")
-            # We should wrap our specific exploit prompt into "vuln_prompt" and leave system empty or minimal.
-            
-            context = {
-                "system_prompt": "You are a Red Team Exploit Developer.",
-                "vuln_prompt": prompt, # The template acts as the main instruction
-                "file_path": file_path
-            }
-
-            # Reuse the LLM client but for this specific task
-            # Note: prompt_template variable already has {code_snippet} placeholder filled, 
-            # but BaseLLMClient might try to format it again if we passed it as vuln_prompt.
-            # BaseLLMClient logic: return f"{system_prompt}\n\n{formatted_prompt.format(...)}"
-            # If we already formatted it, the .format() might fail if there are stray braces.
-            # Strategy: Pass empty code_snippet to analyze_code, and put the FULLY FORMATTED prompt into context['vuln_prompt']
-            # escaping braces if necessary.
-            
-            # Actually, looking at AnthropicClient:
-            # formatted_prompt = vuln_prompt.format(code_snippet=code_snippet, file_path=...)
-            # So we should pass the TEMPLATE as vuln_prompt, and the args in context or args.
-            # But the template has specific placeholders.
-            
-            # Simpler approach: Manual call to internal _construct_prompt is hidden.
-            # We must use analyze_code interface.
-            
-            # Let's just construct the final string and pass it as system_prompt, 
-            # and verify analyze_code doesn't mangle it.
-            # Wait, analyze_code usually formats the vuln_prompt. 
-            
-            # Let's bypass analyze_code formatting issues by passing the fully prepared prompt as 'system_prompt' 
-            # and an empty 'vuln_prompt'.
-            
-            final_prompt_content = prompt_template.format(
-                vulnerability_description=vuln_description,
-                file_path=file_path,
-                code_snippet=code_snippet[:8000]
-            )
+            # The 'prompt' variable is now fully constructed with all placeholders replaced.
+            # We pass this as the 'system_prompt' (or 'vuln_prompt') to the LLM client.
+            # We pass "" as the code_snippet to analyze_code because we already injected it into the prompt.
             
             context_wrapper = {
-                "system_prompt": final_prompt_content,
-                "vuln_prompt": "", # Empty so format() has nothing to complain about
+                "system_prompt": "You are a Red Team Exploit Developer.",
+                "vuln_prompt": prompt, 
                 "file_path": file_path
             }
             
-            poc_content = self.llm_client.analyze_code("", context_wrapper)
+            # Note: analyze_code in some clients might try to formatting vuln_prompt if code_snippet is provided.
+            # Since we pass prompt (which has no braces left ideally) and empty code_snippet, it should be safe.
+            # However, prompt likely contains code with braces.
+            # To be safe against client-side formatting, we can pass the whole prompt as system_prompt
+            # and empty vuln_prompt, or rely on client implementation.
+            # Most clients: f"{system_prompt}\n\n{vuln_prompt}" (no format called if code_snippet is empty or if client checks).
+            
+            # Let's try passing the full prompt as system_prompt to avoid any client-side formatting magic on '{...}' inside code.
+            
+            context_wrapper_safe = {
+                "system_prompt": prompt,
+                "vuln_prompt": "",
+                "file_path": file_path
+            }
+            
+            poc_content = self.llm_client.analyze_code("", context_wrapper_safe)
             
             if not poc_content:
                 log.warning("PoC generation returned empty.")
