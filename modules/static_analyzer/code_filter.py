@@ -69,3 +69,86 @@ class CodeFilter:
 
         log.success(f"Found {len(high_value_files)} high-value target files.")
         return high_value_files
+
+    def extract_secrets(self, content: str) -> List[dict]:
+        """
+        Scans content for hardcoded secrets using regex patterns.
+        Returns a list of detected secrets with metadata.
+        """
+        import re
+        secrets = []
+        
+        patterns = [
+            {
+                "name": "Google API Key",
+                "regex": r"AIza[0-9A-Za-z-_]{35}"
+            },
+            {
+                "name": "Generic Secret Assignment",
+                # Captures: var_name = "secret_value"
+                # Case insensitive for variable names like apiKey, API_KEY, password, secretToken
+                "regex": r"(?i)(api_key|apikey|secret|token|password|auth_token|access_token|client_secret)\s*=\s*[\"']([^\"']+)[\"']",
+                "is_group": True # Indicates the value is in a capture group
+            },
+            {
+                "name": "Bearer Token",
+                "regex": r"Bearer\s+[a-zA-Z0-9\-\._~+/]+=*"
+            },
+            {
+                "name": "Private Key (PEM)",
+                "regex": r"-----BEGIN (?:RSA )?PRIVATE KEY-----"
+            },
+            {
+                "name": "AWS Access Key ID",
+                "regex": r"AKIA[0-9A-Z]{16}"
+            },
+            {
+                "name": "Map/JSON Put",
+                # Captures: .put("secret_key", "value")
+                "regex": r'\.put\(\s*[\"\']([^\"\']*(?:key|secret|password|token|auth|enc_data)[^\"\']*)[\"\']\s*,\s*[\"\']([^\"\']+)[\"\']\s*\)',
+                "is_group": True
+            }
+        ]
+        
+        for p in patterns:
+            try:
+                matches = re.finditer(p["regex"], content)
+                for match in matches:
+                    value = match.group(0)
+                    if p.get("is_group") and len(match.groups()) >= 2:
+                        # For assignments, grabbing the value (group 2) and variable name (group 1)
+                        # We format it as explicit context: "var_name = value"
+                        # Or just return the value? Better to return full context if possible.
+                        # Let's return the simplified value for the exploited script.
+                        value = match.group(2) # The actual secret string
+                        key_name = match.group(1) # The variable name
+                        
+                        # Filter out common false positives or placeholders
+                        if "replace" in value.lower() or "your_" in value.lower() or "dummy" in value.lower():
+                            continue
+                            
+                        secrets.append({
+                            "type": p["name"],
+                            "key": key_name, 
+                            "value": value,
+                            "context": match.group(0) # Full match for context
+                        })
+                    else:
+                        # For direct pattern matches (like AIza...)
+                        secrets.append({
+                            "type": p["name"],
+                            "value": value,
+                            "context": value
+                        })
+            except Exception as e:
+                log.debug(f"Regex error for {p['name']}: {e}")
+                
+        # Deduplicate secrets based on value
+        unique_secrets = []
+        seen_values = set()
+        for s in secrets:
+            if s["value"] not in seen_values:
+                unique_secrets.append(s)
+                seen_values.add(s["value"])
+                
+        return unique_secrets
