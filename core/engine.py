@@ -22,6 +22,7 @@ class Engine:
         self.masvs_mapping = self._load_masvs_mapping()
         
         self.apk_name = "target_app" # Default fallback
+        self.vulnerability_findings = [] # [V1.1.3] Store findings for chained exploitation
         
         # Load Call Graph Builder if enabled
 
@@ -93,7 +94,70 @@ class Engine:
         
         return ".".join(package_parts)
 
-    def _generate_poc(self, file_path: str, code_snippet: str, vuln_description: str, rule_name: str):
+    def _build_global_context(self) -> str:
+        """Summarizes all findings into a global context string."""
+        if not self.vulnerability_findings:
+            return "No previous findings."
+        
+        summary = "Summary of Vulnerabilities found in other components:\n"
+        for finding in self.vulnerability_findings:
+            summary += f"- File: {os.path.basename(finding['file_path'])}\n"
+            summary += f"  - Vulnerability: {finding['rule_name']}\n"
+            summary += f"  - Description: {finding['vuln_description'][:200]}...\n"
+        return summary
+
+    def _generate_chained_exploits(self):
+        """Iterates through findings and generates exploits using global context."""
+        global_context = self._build_global_context()
+        log.info("Generating Chained Exploits with Global Context...")
+        
+        for finding in self.vulnerability_findings:
+            self._generate_poc(
+                finding["file_path"],
+                finding["code_snippet"],
+                finding["vuln_description"],
+                finding["rule_name"],
+                global_context
+            )
+
+    def _is_relevant_file(self, file_path: str, package_name: str) -> bool:
+        """
+        Determines if a file is relevant for analysis based on package scope and blocklist.
+        """
+        # Blocklist (Libraries to ignore)
+        blocklist = [
+            "android/", "androidx/", "com/google/", "kotlin/", 
+            "okhttp3/", "retrofit2/", "io/reactivex/", "dagger/",
+            "b/b/p/", "b/j/a/" # Obfuscated common libs often seen
+        ]
+        
+        # Normalize path
+        normalized_path = file_path.replace("\\", "/")
+        
+        # 1. Check Blocklist
+        for blocked in blocklist:
+            if blocked in normalized_path:
+                return False
+        
+        # 2. Check Whitelist (Package Name)
+        # Convert package name to path provided it's valid
+        if package_name and "." in package_name:
+            package_path = package_name.replace(".", "/")
+            if package_path in normalized_path:
+                return True
+            
+            # If package path is NOT found, but it passed blocklist?
+            # It might be a custom library or root class.
+            # Strict mode: Only allow package path.
+            # Loose mode: Allow everything not blocked.
+            
+            # Let's be strict for now to solve the 'r0.java' issue
+            return False
+            
+        # If no package name extracted, fallback to blocklist only
+        return True
+
+    def _generate_poc(self, file_path: str, code_snippet: str, vuln_description: str, rule_name: str, global_context: str = ""):
         """Generates a PoC script for a confirmed vulnerability."""
         try:
             # [NEW] Manifest Context Injection
@@ -136,8 +200,10 @@ class Engine:
             
             prompt = prompt_template.replace("{vulnerability_description}", vuln_description)
             prompt = prompt.replace("{file_path}", file_path)
+            prompt = prompt.replace("{file_path}", file_path)
             prompt = prompt.replace("{manifest_context}", manifest_context) # Inject Manifest
             prompt = prompt.replace("{detected_secrets}", detected_secrets_str) # Inject Secrets
+            prompt = prompt.replace("{global_context}", global_context) # [V1.1.3] Inject Global Context
             prompt = prompt.replace("{code_snippet}", code_snippet[:8000]) 
 
             
@@ -362,8 +428,15 @@ class Engine:
                 if status == "Vulnerable":
                     parsed_result = self._enrich_result(rule_name, parsed_result)
                     
+                    # [V1.1.3] DEFERRED GENERATION
+                    # Instead of generating PoC immediately, we store the finding.
                     if self.settings.analysis.generate_exploit:
-                         self._generate_poc(file_path, full_code_context, parsed_result.get("description", ""), rule_name)
+                         self.vulnerability_findings.append({
+                             "file_path": file_path,
+                             "code_snippet": full_code_context,
+                             "vuln_description": parsed_result.get("description", ""),
+                             "rule_name": rule_name
+                         })
 
                 results.append({
                     "file": file_path,
@@ -401,8 +474,14 @@ class Engine:
                 if status == "Vulnerable":
                     parsed_result = self._enrich_result(rule_name, parsed_result)
                     
+                    # [V1.1.3] DEFERRED GENERATION
                     if self.settings.analysis.generate_exploit:
-                        self._generate_poc(manifest_path, code_snippet, parsed_result.get("description", ""), rule_name)
+                         self.vulnerability_findings.append({
+                             "file_path": manifest_path,
+                             "code_snippet": code_snippet,
+                             "vuln_description": parsed_result.get("description", ""),
+                             "rule_name": rule_name
+                         })
 
                 results.append({
                     "file": manifest_path,
@@ -601,6 +680,18 @@ class Engine:
             if extra_keywords:
                 log.info(f"Loaded {len(extra_keywords)} dynamic keywords from enabled rules.")
 
+            # --- SCOPE IDENTIFICATION ---
+            # Parse Manifest early to get package name for filtering
+            manifest_path = os.path.join(output_dir, "AndroidManifest.xml")
+            app_package_name = ""
+            if os.path.exists(manifest_path):
+                try:
+                    parser = ManifestParser(manifest_path)
+                    app_package_name = parser.package_name
+                    log.info(f"Identified App Package: {app_package_name}")
+                except Exception as e:
+                    log.warning(f"Failed to parse package name: {e}")
+
             # --- STRATEGY SELECTION ---
             
             # Set scan roots
@@ -680,6 +771,20 @@ class Engine:
                 else:
                     final_targets_for_summary.append(target)
 
+            # [V1.1.4] Apply Scope Filtering
+            filtered_targets = []
+            skipped_count = 0
+            for target in final_targets_for_summary:
+                if self._is_relevant_file(target, app_package_name):
+                    filtered_targets.append(target)
+                else:
+                    skipped_count += 1
+            
+            if skipped_count > 0:
+                log.info(f"Scope Filter: Ignored {skipped_count} library/irrelevant files.")
+            
+            final_targets_for_summary = filtered_targets
+
             
             # --- SUMMARIZATION & RISK ID PHASE ---
             
@@ -710,6 +815,9 @@ class Engine:
         if self.settings.analysis.generate_attack_surface_map:
             attack_surface_map = self.generate_attack_surface_map(manifest_path, self.summaries)
 
+        # Clear previous findings before scan
+        self.vulnerability_findings = []
+
         # Analyze the manifest file
         all_results = self.analyze_manifest(manifest_path, rules_to_run)
 
@@ -736,6 +844,10 @@ class Engine:
             "attack_surface_map": attack_surface_map,
             "results": all_results
         }
+
+        # [V1.1.3] Generate Chained Exploits (Phase 2)
+        if self.settings.analysis.generate_exploit and self.vulnerability_findings:
+            self._generate_chained_exploits()
 
         if output_file is None:
             output_file = f"output/{os.path.basename(apk_path)}_results.json"
