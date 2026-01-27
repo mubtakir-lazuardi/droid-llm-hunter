@@ -52,9 +52,24 @@ def save_settings(config_path: str, settings: Dict[str, Any]) -> None:
 
 def apply_llm_settings(settings: Dict[str, Any]) -> None:
     """Injects CI/CD environment variables into the settings."""
-    provider = os.environ.get(f"{INPUT_PREFIX}PROVIDER")
-    model = os.environ.get(f"{INPUT_PREFIX}MODEL")
-    api_key = os.environ.get(f"{INPUT_PREFIX}API_KEY")
+    # GitHub Actions inputs are usually passed as INPUT_NAME (uppercase).
+    # We check both underscore and dash formats to be safe.
+    provider = os.environ.get(f"{INPUT_PREFIX}PROVIDER") or os.environ.get(
+        f"{INPUT_PREFIX}PROVIDER".replace("_", "-")
+    )
+    model = os.environ.get(f"{INPUT_PREFIX}MODEL") or os.environ.get(
+        f"{INPUT_PREFIX}MODEL".replace("_", "-")
+    )
+
+    # Critical: API Key might be passed as INPUT_API_KEY or INPUT_API-KEY
+    api_key = os.environ.get(f"{INPUT_PREFIX}API_KEY") or os.environ.get(
+        f"{INPUT_PREFIX}API-KEY"
+    )
+
+    # Debug Logging (Sanitized)
+    logger.info(
+        f"Environment check - Provider found: {bool(provider)}, API Key found: {bool(api_key)}"
+    )
 
     if not provider:
         logger.warning(
@@ -103,7 +118,11 @@ def apply_llm_settings(settings: Dict[str, Any]) -> None:
             settings["llm"][key] = api_key
             logger.info("API Key injected successfully.")
         elif provider != "ollama":  # Ollama typically doesn't use API key
-            logger.warning(f"No API key configuration known for provider '{provider}'.")
+            logger.error(f"CRITICAL: No API key found for provider '{provider}'.")
+            logger.error("Please check your GitHub Secrets and workflow configuration.")
+            logger.error(
+                "Expected environment variables: INPUT_API_KEY or INPUT_API-KEY"
+            )
 
 
 def main():
