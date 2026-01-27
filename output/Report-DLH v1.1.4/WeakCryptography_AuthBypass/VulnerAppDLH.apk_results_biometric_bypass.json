@@ -1,0 +1,91 @@
+{
+  "app_summary": "# Application Capabilities Summary\n\n## Core Functionality\nThis is a **Vulnerability Testing/Educational Application** named \"VulnerabilityAppDLH\" designed to demonstrate common Android security vulnerabilities. The app serves as a training tool for security professionals to practice identifying and exploiting various mobile application weaknesses across multiple attack vectors including:\n\n- Authentication bypass techniques\n- Cryptographic vulnerabilities \n- SQL injection attacks\n- Insecure file handling\n- WebView exploitation\n- Inter-Process Communication (IPC) vulnerabilities\n- GraphQL injection attacks\n\n## Security Features\n**Authentication Methods:**\n- **Biometric Authentication**: Implements fingerprint/biometric login but with bypassable security controls\n- **Basic Username/Password**: Traditional credential-based authentication with hardcoded validation\n- **Session Management**: Generates session tokens (though using weak/predictable methods)\n\n**Cryptography Usage:**\n- Demonstrates weak random number generation for session tokens\n- Contains hardcoded cryptographic secrets and API keys\n- Shows insecure cryptographic implementations as educational examples\n\n## Data Handling\n**Sensitive Data Collected/Stored:**\n- **User Credentials**: Usernames and passwords stored in SharedPreferences\n- **AWS Access Keys**: Hardcoded AWS secret keys and access tokens in source code\n- **API Tokens**: Hardcoded API tokens and secrets embedded in the application\n- **Session Data**: User session information and authentication tokens\n- **Database Records**: SQLite database containing user credentials and sensitive flags\n- **File System Data**: Creates world-readable files with potentially sensitive information\n\n**Storage Methods:**\n- SharedPreferences (insecure storage)\n- SQLite database with vulnerable query handling\n- Local file system with improper permissions\n- Hardcoded secrets in application code\n\n## Permissions\n**Notable Dangerous Permissions:**\n- `USE_BIOMETRIC` - Access to biometric authentication hardware\n- `USE_FINGERPRINT` - Access to fingerprint sensor (legacy)\n\n**Custom Permissions:**\n- `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` - Custom signature-level permission for internal component communication\n\n**Key Security Concerns:**\n- All activities are exported (`android:exported=\"true\"`), making them accessible to other applications\n- Debug mode enabled (`android:debuggable=\"true\"`) in production build\n- Backup allowed (`android:allowBackup=\"true\"`) potentially exposing sensitive data\n- Broadcast receiver exposed for password reset functionality\n- Deep link handlers accept arbitrary URLs without validation\n- WebView configured with dangerous settings (JavaScript enabled, file access allowed)\n\nThis application intentionally contains multiple severe security vulnerabilities across all major MASVS (Mobile Application Security Verification Standard) categories, making it suitable for security training and penetration testing practice.",
+  "attack_surface_map": "# Attack Surface Map for com.dlh.vulnerapp\n\n## 1. Exported Components (Primary Attack Vectors)\n\n### 1.1 Exported Activities\n- **MainActivity** (`com.dlh.vulnerapp.MainActivity`)\n  - Entry point: `android.intent.action.MAIN` \n  - Attack: Direct invocation via ADB or malicious apps\n\n- **SecretsActivity** (`com.dlh.vulnerapp.SecretsActivity`)\n  - Entry point: Direct activity launch\n  - Attack: Bypass authentication screens, extract stored credentials from SharedPreferences\n\n- **WebViewActivity** (`com.dlh.vulnerapp.WebViewActivity`)\n  - Entry point: Deep link `dlh://webview`\n  - Attack: Load arbitrary URLs, JavaScript injection, access to JavaScript bridge exposing secrets\n\n- **SQLInjectionActivity** (`com.dlh.vulnerapp.SQLInjectionActivity`)\n  - Entry point: Direct activity launch\n  - Attack: SQL injection through user input fields\n\n- **InsecureFileActivity** (`com.dlh.vulnerapp.InsecureFileActivity`)\n  - Entry point: Direct activity launch\n  - Attack: Path traversal attacks, access world-readable files\n\n- **CryptoActivity** (`com.dlh.vulnerapp.CryptoActivity`)\n  - Entry point: Direct activity launch\n  - Attack: Bypass VIP checks, exploit weak token generation, bypass biometric authentication\n\n- **GraphQLInjectionActivity** (`com.dlh.vulnerapp.GraphQLInjectionActivity`)\n  - Entry point: Direct activity launch\n  - Attack: GraphQL injection attacks\n\n- **UnprotectedExportedActivity** (`com.dlh.vulnerapp.UnprotectedExportedActivity`)\n  - Entry point: Deep link `vulnerapp://*` (wildcard host)\n  - Attack: IPC exploitation, arbitrary data injection via intent extras\n\n### 1.2 Exported Broadcast Receivers\n- **SpoofableReceiver** (`com.dlh.vulnerapp.SpoofableReceiver`)\n  - Entry point: `com.dlh.vulnerapp.ACTION_RESET_PASSWORD`\n  - Attack: Password reset spoofing, unauthorized password changes\n\n- **ProfileInstallReceiver** (`androidx.profileinstaller.ProfileInstallReceiver`)\n  - Entry point: Multiple androidx.profileinstaller actions\n  - Attack: Profile manipulation (requires DUMP permission)\n\n## 2. Deep Links\n\n### 2.1 WebView Deep Link\n- **Scheme**: `dlh://webview`\n- **Attack Vectors**:\n  - Arbitrary URL loading without validation\n  - Cross-site scripting (XSS) via malicious URLs\n  - Access to JavaScript bridge exposing hardcoded secrets\n  - Universal file access exploitation\n\n### 2.2 IPC Deep Link\n- **Scheme**: `vulnerapp://*` (wildcard)\n- **Attack Vectors**:\n  - Intent parameter injection\n  - Arbitrary data manipulation\n  - IPC vulnerability exploitation\n\n## 3. Network Communication\n\n### 3.1 WebView Network Attacks\n- **Attack Surface**: WebViewActivity\n- **Vectors**:\n  - Man-in-the-middle attacks on loaded web content\n  - Malicious JavaScript execution\n  - Unsafe HTTP/HTTPS content loading\n  - JavaScript bridge exploitation\n\n## 4. File I/O Vulnerabilities\n\n### 4.1 Insecure File Operations\n- **Attack Surface**: InsecureFileActivity\n- **Vectors**:\n  - World-readable file creation\n  - Path traversal attacks via user input\n  - Unauthorized file access\n  - Sensitive data exposure through filesystem\n\n### 4.2 SharedPreferences Exposure\n- **Attack Surface**: SecretsActivity\n- **Vectors**:\n  - Hardcoded AWS access keys and API tokens\n  - User credentials stored in SharedPreferences\n  - Backup/restore data extraction\n\n### 4.3 Database Vulnerabilities\n- **Attack Surface**: SQLInjectionActivity\n- **Vectors**:\n  - SQLite database with unsanitized queries\n  - User credential exposure\n  - Secret/flag data extraction via SQL injection\n\n## 5. User Input Attack Points\n\n### 5.1 Authentication Forms\n- **SecretsActivity**: Username/password input fields\n- **SQLInjectionActivity**: Search/query input fields\n- **CryptoActivity**: VIP status and token generation inputs\n\n### 5.2 File Path Inputs\n- **InsecureFileActivity**: File path parameters for read operations\n\n### 5.3 WebView URL Inputs\n- **WebViewActivity**: URL parameters from deep links and user input\n\n### 5.4 GraphQL Inputs\n- **GraphQLInjectionActivity**: GraphQL query parameters\n\n## 6. Data Extraction Points\n\n### 6.1 Hardcoded Secrets\n- AWS access keys and secret keys in SecretsActivity\n- API tokens embedded in code\n- Secrets exposed via JavaScript bridge in WebViewActivity\n\n### 6.2 Database Content\n- User credentials in SQLite database\n- Secret flags stored in database tables\n\n### 6.3 File System Data\n- World-readable files created by InsecureFileActivity\n- SharedPreferences containing sensitive data\n\n### 6.4 Cryptographic Weaknesses\n- Predictable session tokens from weak RNG\n- Bypassable biometric authentication\n- Weak VIP authorization checks\n\n## 7. Configuration-Based Vulnerabilities\n\n### 7.1 Application Settings\n- `android:debuggable=\"true\"` - Debug mode enabled\n- `android:allowBackup=\"true\"` - Backup extraction possible\n- Universal file access enabled in WebView\n- JavaScript execution enabled without proper sandboxing\n\n## Summary of Critical Attack Vectors:\n1. **Deep link exploitation** via wildcard scheme handlers\n2. **SQL injection** through unsanitized database queries  \n3. **WebView XSS** and JavaScript bridge exploitation\n4. **File path traversal** and world-readable file access\n5. **Hardcoded secrets** extraction from code and storage\n6. **Broadcast receiver spoofing** for password reset\n7. **Cryptographic bypasses** and weak token generation\n8. **IPC exploitation** through exported activities without proper validation",
+  "results": [
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/SecretsActivity.java",
+      "vulnerability": "Biometric Authentication Bypass",
+      "status": "Not Vulnerable",
+      "result": {
+        "is_vulnerable": false,
+        "severity": "Info",
+        "confidence": "High",
+        "evidence": "No BiometricPrompt implementation found in the provided code snippet",
+        "description": "The provided code does not contain any BiometricPrompt implementation or biometric authentication mechanisms. This is a SecretsActivity class that handles basic username/password authentication and stores credentials in SharedPreferences, but does not implement biometric authentication at all.",
+        "attack_scenario": "No biometric authentication bypass is possible since no biometric authentication is implemented in this code.",
+        "attacker_priority": "LOW",
+        "recommendation": "If biometric authentication is intended for this sensitive activity that handles AWS credentials and API tokens, consider implementing BiometricPrompt with proper security measures including: 1) Use BiometricPrompt.CryptoObject for cryptographic operations, 2) Validate authentication in onAuthenticationSucceeded callback with proper crypto validation, 3) Implement proper fallback mechanisms.",
+        "false_positive_analysis": "This is definitively not a false positive as there is no BiometricPrompt code present. The analysis specifically looks for BiometricPrompt implementations and potential bypass vulnerabilities in the onAuthenticationSucceeded callback, neither of which exist in this code snippet. However, the code does contain other security issues (hardcoded credentials, insecure storage) that are outside the scope of this biometric authentication analysis."
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/CryptoActivity.java",
+      "vulnerability": "Biometric Authentication Bypass",
+      "status": "Vulnerable",
+      "result": {
+        "is_vulnerable": true,
+        "severity": "Critical",
+        "confidence": "High",
+        "evidence": "private final void performBiometricAuth() {\n    biometricLibraryCall();\n    TextView textView = this.statusText;\n    if (textView == null) {\n        Intrinsics.throwUninitializedPropertyAccessException(\"statusText\");\n        textView = null;\n    }\n    textView.setText(\"Biometric Auth Success! (Or Bypassed)\");\n}",
+        "description": "The biometric authentication implementation is completely bypassed. The performBiometricAuth() method executes authentication success logic without any actual BiometricPrompt verification. The biometricLibraryCall() method returns false but this return value is ignored, and the success message is displayed regardless.",
+        "attack_scenario": "An attacker can simply click the biometric authentication button in the application UI to trigger the performBiometricAuth() method. This will immediately execute the success logic and display 'Biometric Auth Success! (Or Bypassed)' without requiring any biometric verification whatsoever. The attacker gains unauthorized access without providing fingerprint, face recognition, or any other biometric credential.",
+        "attacker_priority": "HIGH",
+        "recommendation": "Implement proper BiometricPrompt authentication with secure callbacks. Create a BiometricPrompt instance with proper AuthenticationCallback that only executes success logic within the onAuthenticationSucceeded() method. Ensure the authentication result is properly validated and that success actions are only performed after successful biometric verification. Remove the automatic success message and only display it after genuine authentication.",
+        "false_positive_analysis": "This is not a false positive. The code clearly shows a mock implementation where biometric authentication is completely bypassed. While biometricLibraryCall() exists, it returns false and this result is ignored. The success logic executes unconditionally, making this a definitive security vulnerability rather than a false positive.",
+        "masvs_reference": {
+          "id": "MASVS-AUTH-2",
+          "description": "The app performs local authentication securely according to the platform best practices. Check for weak implementations of BiometricPrompt.",
+          "link": "https://mas.owasp.org/MASVS/controls/MASVS-AUTH-2/"
+        }
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/InsecureFileActivity.java",
+      "vulnerability": "Biometric Authentication Bypass",
+      "status": "Not Vulnerable",
+      "result": {
+        "is_vulnerable": false,
+        "severity": "Info",
+        "confidence": "High",
+        "evidence": "No BiometricPrompt implementation found in the provided code snippet.",
+        "description": "The code snippet does not contain any biometric authentication implementation. This is an InsecureFileActivity class that handles file operations but does not use BiometricPrompt or any biometric authentication mechanisms.",
+        "attack_scenario": "No biometric authentication bypass attack scenario applies as there is no biometric authentication implementation in this code.",
+        "attacker_priority": "LOW",
+        "recommendation": "No biometric-related remediation needed for this code snippet as it does not implement biometric authentication. However, if biometric authentication is needed for securing file access, consider implementing BiometricPrompt with proper security measures.",
+        "false_positive_analysis": "This is definitively not a false positive as the code clearly does not contain any BiometricPrompt implementation or biometric authentication logic. The analysis is straightforward - the code is related to insecure file operations, not biometric authentication, making it irrelevant to the MASVS-AUTH-2 standard being evaluated."
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/SQLInjectionActivity.java",
+      "vulnerability": "Biometric Authentication Bypass",
+      "status": "Not Vulnerable",
+      "result": {
+        "is_vulnerable": false,
+        "severity": "Info",
+        "confidence": "High",
+        "evidence": "No BiometricPrompt implementation found in the provided code snippet.",
+        "description": "The provided code snippet implements an SQLInjectionActivity class that demonstrates SQL injection vulnerabilities, but contains no biometric authentication functionality. There are no imports, references, or implementations of BiometricPrompt, onAuthenticationSucceeded callbacks, or any other biometric authentication components.",
+        "attack_scenario": "No biometric authentication bypass attack scenario applies to this code as it does not implement any biometric authentication mechanisms.",
+        "attacker_priority": "LOW",
+        "recommendation": "This code is not relevant to biometric authentication security. However, the code does contain a severe SQL injection vulnerability in the performVulnerableSearch method that should be addressed by using parameterized queries.",
+        "false_positive_analysis": "This is definitively not a false positive regarding biometric authentication vulnerabilities - the code simply does not contain any biometric authentication implementation. The analysis request specifically looks for BiometricPrompt implementations and onAuthenticationSucceeded callbacks, neither of which exist in this SQLInjectionActivity class."
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/WebViewActivity.java",
+      "vulnerability": "Biometric Authentication Bypass",
+      "status": "Not Vulnerable",
+      "result": {
+        "is_vulnerable": false,
+        "severity": "Info",
+        "confidence": "High",
+        "evidence": "No BiometricPrompt implementation found in the provided code snippet.",
+        "description": "The provided code snippet contains a WebView implementation but does not contain any BiometricPrompt implementation or biometric authentication mechanisms. The code is focused on WebView functionality with JavaScript interfaces.",
+        "attack_scenario": "No biometric authentication bypass attack scenario is applicable as no BiometricPrompt implementation exists in this code.",
+        "attacker_priority": "LOW",
+        "recommendation": "No remediation needed for biometric authentication bypass as no biometric authentication is implemented in this code. However, note that this WebView implementation has other security concerns unrelated to the MASVS-AUTH-2 requirement.",
+        "false_positive_analysis": "This is not a false positive - there is genuinely no BiometricPrompt implementation in the provided code. The analysis correctly identifies that the vulnerability being searched for (biometric authentication bypass) is not present because biometric authentication is not implemented at all in this code snippet."
+      }
+    }
+  ]
+}

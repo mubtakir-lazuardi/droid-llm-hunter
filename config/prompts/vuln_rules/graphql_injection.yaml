@@ -15,3 +15,7 @@ prompt: |
 
   Is there a potential GraphQL injection vulnerability in this code? If yes, explain how it could be exploited and suggest a remediation.
 tags: ["graphql", "injection", "api"]
+keywords:
+  - "graphql"
+  - "query"
+  - "GraphQL"

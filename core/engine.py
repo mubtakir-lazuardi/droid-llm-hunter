@@ -8,11 +8,14 @@ from modules.llm_client.gemini import GeminiClient
 from modules.llm_client.groq import GroqClient
 from modules.llm_client.openai import OpenAIClient
 from modules.llm_client.anthropic import AnthropicClient
+from modules.llm_client.openrouter import OpenRouterClient
 from core.call_graph import CallGraphBuilder
 from core.manifest_parser import ManifestParser
 import os
 import yaml
 import concurrent.futures
+import zipfile
+import shutil
 
 class Engine:
     def __init__(self, settings: Settings):
@@ -57,6 +60,8 @@ class Engine:
             return OpenAIClient(model=self.settings.llm.openai_model, api_key=self.settings.llm.openai_api_key)
         elif self.settings.llm.provider == "anthropic":
             return AnthropicClient(model=self.settings.llm.anthropic_model, api_key=self.settings.llm.anthropic_api_key)
+        elif self.settings.llm.provider == "openrouter":
+            return OpenRouterClient(model=self.settings.llm.openrouter_model, api_key=self.settings.llm.openrouter_api_key)
         else:
             raise ValueError(f"Unsupported LLM provider: {self.settings.llm.provider}")
 
@@ -134,27 +139,21 @@ class Engine:
         # Normalize path
         normalized_path = file_path.replace("\\", "/")
         
-        # 1. Check Blocklist
-        for blocked in blocklist:
-            if blocked in normalized_path:
-                return False
+        # [FIX] Logic Reordered: Check Whitelist (Package Name) FIRST
+        # This prevents apps like 'com.google.myapp' from being blocked by 'com/google/' in blocklist.
         
-        # 2. Check Whitelist (Package Name)
-        # Convert package name to path provided it's valid
+        # 1. Check Whitelist (Package Name)
         if package_name and "." in package_name:
             package_path = package_name.replace(".", "/")
             if package_path in normalized_path:
                 return True
+        
+        # 2. Check Blocklist
+        for blocked in blocklist:
+            if blocked in normalized_path:
+                return False
             
-            # If package path is NOT found, but it passed blocklist?
-            # It might be a custom library or root class.
-            # Strict mode: Only allow package path.
-            # Loose mode: Allow everything not blocked.
-            
-            # Let's be strict for now to solve the 'r0.java' issue
-            return False
-            
-        # If no package name extracted, fallback to blocklist only
+        # If no package name extracted and not blocked, allow it.
         return True
 
     def _generate_poc(self, file_path: str, code_snippet: str, vuln_description: str, rule_name: str, global_context: str = ""):
@@ -244,7 +243,7 @@ class Engine:
             ext = ".txt"
             if "Java.perform" in poc_content or "Java.use" in poc_content or "console.log" in poc_content:
                 ext = ".js"
-            elif "import " in poc_content or "def " in poc_content or "```python" in poc_content:
+            elif "import " in poc_content or "def " in poc_content:
                 ext = ".py" 
             elif "<html" in poc_content.lower() or "<script" in poc_content.lower():
                 ext = ".html"
@@ -255,11 +254,16 @@ class Engine:
             # Use the stored apk_name (without extension ideally, or keep it?)
             # User wants: "dvba.apk" -> "dvba_exploits" (or similar)
             
-            clean_name = self.apk_name
-            if clean_name.lower().endswith(".apk"):
-                clean_name = clean_name[:-4]
-                
-            exploit_dir = f"output/{clean_name}_exploits"
+            # Use the pre-calculated exploit directory from 'run' if available, otherwise fallback
+            if hasattr(self, 'final_exploit_dir') and self.final_exploit_dir:
+                 exploit_dir = self.final_exploit_dir
+            else:
+                 # Fallback (shouldn't happen in normal flow)
+                 clean_name = self.apk_name
+                 if clean_name.lower().endswith(".apk"):
+                     clean_name = clean_name[:-4]
+                 exploit_dir = f"output/{clean_name}_exploits"
+
             os.makedirs(exploit_dir, exist_ok=True)
             
             filename = f"{rule_name}_{os.path.basename(file_path)}{ext}"
@@ -616,9 +620,72 @@ class Engine:
         log.info(f"Starting analysis of {apk_path}...")
         
         rules_to_run = rules.split(',') if rules else None
+        
+        # [V1.1.4] XAPK Auto-Extraction Support
+        if apk_path.lower().endswith(".xapk"):
+             log.info(f"Detected XAPK file: {apk_path}. Attempting to extract...")
+             xapk_name = os.path.basename(apk_path)
+             temp_extract_dir = f"output/temp_xapk_{xapk_name}"
+             os.makedirs(temp_extract_dir, exist_ok=True)
+             
+             try:
+                 with zipfile.ZipFile(apk_path, 'r') as zip_ref:
+                     zip_ref.extractall(temp_extract_dir)
+                 
+                 # Find the largest .apk file (heuristically the base/main APK)
+                 largest_apk = None
+                 max_size = 0
+                 
+                 for root, dirs, files in os.walk(temp_extract_dir):
+                     for file in files:
+                         if file.lower().endswith(".apk"):
+                             full_path = os.path.join(root, file)
+                             size = os.path.getsize(full_path)
+                             if size > max_size:
+                                 max_size = size
+                                 largest_apk = full_path
+                 
+                 if largest_apk:
+                     log.success(f"Extracted XAPK and selected main APK: {largest_apk}")
+                     apk_path = largest_apk # Override valid APK path
+                 else:
+                     log.error("Could not find any .apk file inside the XAPK archive.")
+                     return # Abort
+                     
+             except zipfile.BadZipFile:
+                 log.error(f"Failed to extract XAPK: {apk_path} is not a valid zip file.")
+                 return
+             except Exception as e:
+                 log.error(f"Error handling XAPK: {e}")
+                 return
+
         self.apk_name = os.path.basename(apk_path) # Store for later use
         apk_name = self.apk_name
         output_dir = f"output/{apk_name}_decompiled"
+        
+        # [Moved from end] Calculate unique output file/dir options EARLY
+        if output_file is None:
+            base_filename = f"{os.path.basename(apk_path)}_results.json"
+            base_exploit_dir_name = f"{os.path.basename(apk_path).replace('.apk', '')}_exploits"
+            
+            # Initial candidates
+            candidate_file = f"output/{base_filename}"
+            candidate_exploit_dir = f"output/{base_exploit_dir_name}"
+            
+            # Versioning loop
+            scan_count = 1
+            while os.path.exists(candidate_file):
+                 # Create suffix _scan1, _scan2...
+                 candidate_file = f"output/{base_filename.replace('.json', '')}_scan{scan_count}.json"
+                 candidate_exploit_dir = f"output/{base_exploit_dir_name}_scan{scan_count}"
+                 scan_count += 1
+            
+            self.final_output_file = candidate_file
+            self.final_exploit_dir = candidate_exploit_dir
+        else:
+            self.final_output_file = output_file
+            filename_no_ext = os.path.splitext(os.path.basename(output_file))[0]
+            self.final_exploit_dir = f"output/{filename_no_ext}_exploits"
         
         decomp_mode = self.settings.analysis.decompiler_mode
         log.info(f"Decompiler Mode: {decomp_mode}")
@@ -849,13 +916,11 @@ class Engine:
         if self.settings.analysis.generate_exploit and self.vulnerability_findings:
             self._generate_chained_exploits()
 
-        if output_file is None:
-            output_file = f"output/{os.path.basename(apk_path)}_results.json"
-        
-        with open(output_file, "w") as f:
+        # Output the report to the pre-calculated path
+        with open(self.final_output_file, "w") as f:
             import json
             json.dump(final_report, f, indent=2)
-        log.success(f"Analysis complete. Results saved to {output_file}")
+        log.success(f"Analysis complete. Results saved to {self.final_output_file}")
 
     def _load_system_prompt(self) -> str:
         with open("config/prompts/system_prompt.txt", "r") as f:

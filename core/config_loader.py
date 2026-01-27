@@ -14,6 +14,8 @@ class LLMSettings(BaseModel):
     openai_api_key: Optional[str] = None
     anthropic_model: Optional[str] = None
     anthropic_api_key: Optional[str] = None
+    openrouter_model: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
 
 class ApktoolSettings(BaseModel):
     path: Optional[str] = None

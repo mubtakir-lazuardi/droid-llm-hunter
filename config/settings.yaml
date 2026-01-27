@@ -13,6 +13,8 @@ llm:
   openai_api_key: "OPENAI_API_KEY" # Replace with your OpenAI API key
   anthropic_model: "claude-sonnet-4-20250514" # default model for anthropic or "claude-sonnet-4-5-20250929"
   anthropic_api_key: "ANTHROPIC_API_KEY" # Replace with your Anthropic API key
+  openrouter_model: "google/gemini-2.5-flash" #  default model for openrouter or "google/gemini-2.5-pro"
+  openrouter_api_key: "OPENROUTER_API_KEY" # Replace with your Openrouter API key
 
 # Apktool Configuration
 apktool:
@@ -27,7 +29,7 @@ analysis:
   generate_attack_surface_map: true # Generate Attack Surface Map
   use_cross_reference_context: true # Use Cross Reference Context
   filter_mode: "hybrid" # static_only, llm_only, hybrid
-  decompiler_mode: "apktool" # Options: apktool (default), jadx, hybrid
+  decompiler_mode: "hybrid" # Options: apktool (default), jadx, hybrid
   generate_exploit: false # Generate PoC scripts for vulnerabilities
   
 # Analysis Rules
