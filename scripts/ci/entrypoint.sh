@@ -69,7 +69,7 @@ log_info "Running Droid-LLM-Hunter scan..."
 
 # Note: We capture the exit status. Currently dlh.py returns 0 even on findings,
 # but we prepare this logic for future strict modes.
-if python3 dlh.py scan "$FULL_APK_PATH" --output "$OUTPUT_FILE"; then
+if python3 dlh.py --output "$OUTPUT_FILE" scan "$FULL_APK_PATH"; then
     log_info "Scan completed successfully."
 else
     log_error "Scan failed to complete due to an internal error."
