@@ -91,6 +91,7 @@ Features **Auto-Exploit Generation**, transforming from a passive scanner into a
     *   **`llm_only`:** Maximum accuracy using pure AI analysis.
     *   **`static_only`:** Blazing fast keyword scanning.
     *   **`hybrid`:** The best of both worlds Static keywords filter the noise, AI verifies the danger.
+*   **🏗️ Hybrid Architecture (v1.1.5):** A revolutionary "Search -> Regex Filter -> LLM" pipeline that drastically reduces token usage and increases speed. [Read the Docs](ARCHITECTURE_EXPLANATION.md)
 *   **🛠️ Flexible Configuration:** a simple yet powerful configuration file (`config/settings.yaml`) allows for easy management of LLM providers, models, rules, and **Decompiler Settings** (Apktool/JADX).
 *   **🕸️ Context-Aware Scanning:** Utilizes a **Call Graph** to understand file dependencies. Use CrossReference Context to let the AI know *who* calls a function and with *what* arguments. [Read the Docs](CROSS_REFERENCE_CONTEXT.md)
 *   **⚔️ Attack Surface Mapper:** Combines **Manifest Structure** (Exported components) with **Code Logic** (AI Summaries) to identify high-risk entry points (e.g., specific activities processing unvalidated URLs). [Read the Docs](ATTACK_SURFACE_MAPPER.md)
@@ -128,7 +129,7 @@ Droid LLM Hunter uses a multi-stage process to analyze an APK:
                        |
                        v
 +----------------------+--------------------------------+
-|  PHASE 2: SMART SCOPE PROTECTION (The Immune System)  |  <-- [NEW v1.1.3]
+|  PHASE 2: SMART SCOPE PROTECTION (The Immune System)  |  <-- [v1.1.3]
 |                                                       |
 |  [ All Smali/Java Files ]                             |
 |          |                                            |
@@ -143,21 +144,30 @@ Droid LLM Hunter uses a multi-stage process to analyze an APK:
                        |
                        v
 +----------------------+--------------------------------+
-|  PHASE 3: DISCOVERY & RISK ID (Pass 1)                |
++----------------------+--------------------------------+
+|  PHASE 3: DISCOVERY & RISK ID (Hybrid Pass)           |
 |                                                       |
 |    [ Loop: Analyze Relevant Files ]                   |
 |                 |                                     |
 |                 v                                     |
-|      [ LLM / Static Scan ] -> [ Validate Finding ]    |
-|                 |                                     |
-|                 v                                     |
-|         [ Store in Knowledge Base ]                   |
-|       (Do NOT Generate Exploits Yet)                  |
+|    [ REGEX FILTER (Zero Cost) ]                       |  <-- [NEW v1.1.5]
+|    (Match 'detection_pattern'?)                       |
+|       NO |             | YES                          |
+|          v             v                              |
+|       [ Skip ]      [ LLM VERIFICATION ]              |
+|                     (Context & Logic Check)           |
+|                                |                      |
+|                                v                      |
+|                     [ Validate Finding ]              |
+|                                |                      |
+|                                v                      |
+|                     [ Store in Knowledge Base ]       |
+|                   (Do NOT Generate Exploits Yet)      |
 +----------------------+--------------------------------+
                        |
                        v
 +----------------------+--------------------------------+
-|  PHASE 4: INTELLIGENT CHAINING (Pass 2)               |  <-- [NEW v1.1.3]
+|  PHASE 4: INTELLIGENT CHAINING (Pass 2)               |  <-- [v1.1.3]
 |                                                       |
 |      [ Build Global Context ]                         |
 |   (Summarize all findings from Phase 3)               |
@@ -252,6 +262,16 @@ Enable or Disable these rules in `config/settings.yaml`:
 - path_traversal
 - insecure_webview
 - universal_logic_flaw
+- pending_intent_hijacking
+- fragment_injection
+- zip_slip
+- deeplink_logic_bypass
+- unsafe_reflection
+- webview_file_access
+- insecure_deserialization
+- strandhogg
+- hardcoded_secrets_xml
+
 ```
 
 ## Filter Mode Scanners

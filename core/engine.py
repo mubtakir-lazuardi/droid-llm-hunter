@@ -303,8 +303,14 @@ class Engine:
 
         # Strategy 0: Clean Markdown Code Blocks
         # Many LLMs wrap JSON in ```json ... ```
-        cleaned_response = re.sub(r'^```[a-zA-Z]*\n', '', response.strip())
-        cleaned_response = re.sub(r'```$', '', cleaned_response).strip()
+        # We find the first block enclosed in backticks if present
+        markdown_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+        if markdown_match:
+             cleaned_response = markdown_match.group(1)
+        else:
+             # Fallback: regex replace if it's just tags without proper closure or mixed content
+             cleaned_response = re.sub(r'^```[a-zA-Z]*\s*', '', response.strip())
+             cleaned_response = re.sub(r'\s*```$', '', cleaned_response).strip()
 
         # Strategy 1: Extract JSON using Brace Counting (Most Robust)
         json_candidate = self._extract_json_str(cleaned_response)
@@ -455,7 +461,7 @@ class Engine:
         with open(manifest_path, "r", encoding="utf-8") as f:
             code_snippet = f.read()
 
-        manifest_rules = ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack"]
+        manifest_rules = ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack", "strandhogg"]
         for rule_name in manifest_rules:
             if getattr(self.settings.rules, rule_name):
                 if rules_to_run and rule_name not in rules_to_run:
@@ -493,6 +499,71 @@ class Engine:
                     "status": status,
                     "result": parsed_result 
                 })
+        return results
+
+    def analyze_strings_xml(self, decompiled_dir: str, rules_to_run: list = None):
+        """Scans res/values/strings.xml for hardcoded secrets."""
+        results = []
+        rule_name = "hardcoded_secrets_xml"
+        
+        if not getattr(self.settings.rules, rule_name):
+            return []
+
+        if rules_to_run and rule_name not in rules_to_run:
+            return []
+
+        # Find strings.xml
+        strings_path = None
+        for root, _, files in os.walk(decompiled_dir):
+            if "strings.xml" in files:
+                # Prioritize res/values/strings.xml
+                potential = os.path.join(root, "strings.xml")
+                if "values" in root.split(os.sep): 
+                     strings_path = potential
+                     break
+                # Fallback to any strings.xml if not in valus (unlikely but possible)
+                if not strings_path:
+                    strings_path = potential
+
+        if not strings_path:
+            log.warning("strings.xml not found in decompiled output.")
+            return []
+
+        log.info(f"Analyzing {strings_path} for Hardcoded Secrets...")
+        
+        with open(strings_path, "r", encoding="utf-8") as f:
+            code_snippet = f.read()
+
+        prompt_path = f"config/prompts/vuln_rules/{rule_name}.yaml"
+        with open(prompt_path, "r") as f:
+            prompt_data = yaml.safe_load(f)
+
+        context = {
+            "system_prompt": self._load_system_prompt(),
+            "vuln_prompt": prompt_data["prompt"],
+            "file_path": strings_path
+        }
+
+        raw_result = self.llm_client.analyze_code(code_snippet, context)
+        parsed_result = self._parse_llm_response(raw_result)
+        status = self.get_status(parsed_result)
+        
+        if status == "Vulnerable":
+            # [V1.1.3] DEFERRED GENERATION
+            if self.settings.analysis.generate_exploit:
+                    self.vulnerability_findings.append({
+                        "file_path": strings_path,
+                        "code_snippet": code_snippet,
+                        "vuln_description": parsed_result.get("description", ""),
+                        "rule_name": rule_name
+                    })
+
+        results.append({
+            "file": strings_path,
+            "vulnerability": prompt_data["name"],
+            "status": status,
+            "result": parsed_result 
+        })
         return results
 
     def summarize_chunks(self, decompiled_dir: str, file_list: list = None):
@@ -729,23 +800,35 @@ class Engine:
             filter_mode = self.settings.analysis.filter_mode
             log.info(f"Using filter mode: {filter_mode}")
 
-            # --- DYNAMIC KEYWORD GATHERING ---
+            # --- DYNAMIC KEYWORD & REGEX GATHERING ---
             extra_keywords = []
+            extra_regex = [] 
             for rule_name, enabled in self.settings.rules.dict().items():
-                if enabled and rule_name not in ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack"]:
+                if enabled and rule_name not in ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack", "strandhogg"]:
                      try:
                         prompt_path = f"config/prompts/vuln_rules/{rule_name}.yaml"
                         with open(prompt_path, "r") as f:
                             rule_data = yaml.safe_load(f)
                             if "keywords" in rule_data and rule_data["keywords"]:
                                 extra_keywords.extend(rule_data["keywords"])
+                            
+                            if "detection_pattern" in rule_data and rule_data["detection_pattern"]:
+                                extra_regex.append(rule_data["detection_pattern"])
+                            elif "static_analysis" in rule_data:
+                                if "patterns" in rule_data["static_analysis"]:
+                                    extra_regex.extend(rule_data["static_analysis"]["patterns"])
+                                    
                      except Exception as e:
-                         log.warning(f"Could not load keywords from {rule_name}: {e}")
+                         log.warning(f"Could not load matching logic from {rule_name}: {e}")
             
-            # Deduplicate keywords
+            # Deduplicate
             extra_keywords = list(set(extra_keywords))
+            extra_regex = list(set(extra_regex))
+            
             if extra_keywords:
-                log.info(f"Loaded {len(extra_keywords)} dynamic keywords from enabled rules.")
+                log.info(f"Loaded high-value keywords: {len(extra_keywords)}")
+            if extra_regex:
+                log.info(f"Loaded high-value regex patterns: {len(extra_regex)}")
 
             # --- SCOPE IDENTIFICATION ---
             # Parse Manifest early to get package name for filtering
@@ -770,30 +853,31 @@ class Engine:
             
             # A. STATIC FILTER PHASE
             if filter_mode in ["static_only", "hybrid"]:
+                use_strict = (filter_mode == "hybrid")
                 if decomp_mode == "apktool":
-                    cf = CodeFilter(smali_dir, mode="smali", additional_keywords=extra_keywords)
+                    cf = CodeFilter(smali_dir, mode="smali", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
                     potential_targets = cf.find_high_value_targets()
                     
                 elif decomp_mode == "jadx":
                     if os.path.exists(java_dir):
-                        cf = CodeFilter(java_dir, mode="java", additional_keywords=extra_keywords)
+                        cf = CodeFilter(java_dir, mode="java", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
                         potential_targets = cf.find_high_value_targets()
                     else:
                         log.error("JADX sources not found. Falling back to Smali.")
-                        cf = CodeFilter(smali_dir, mode="smali", additional_keywords=extra_keywords)
+                        cf = CodeFilter(smali_dir, mode="smali", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
                         potential_targets = cf.find_high_value_targets()
 
                 elif decomp_mode == "hybrid":
                     # HYBRID DECOMPILER + HYBRID FILTER
                     # Ideally we want to find Java targets.
                     if os.path.exists(java_dir):
-                        cf = CodeFilter(java_dir, mode="java", additional_keywords=extra_keywords)
+                        cf = CodeFilter(java_dir, mode="java", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
                         java_targets = cf.find_high_value_targets()
                         potential_targets = java_targets
                         # Note: We rely on Java finding them. If obfuscation hides keywords in Java 
                         # but not Smali? That's rare. Usually matches.
                     else:
-                        cf = CodeFilter(smali_dir, mode="smali", additional_keywords=extra_keywords)
+                        cf = CodeFilter(smali_dir, mode="smali", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
                         potential_targets = cf.find_high_value_targets()
 
             # B. LLM_ONLY PHASE (Get everything)
@@ -812,6 +896,8 @@ class Engine:
                             for file in files:
                                 if file.endswith(".java"): potential_targets.append(os.path.join(root, file))
             
+            # --- STRINGS.XML ANALYSIS ---
+            strings_results = self.analyze_strings_xml(output_dir, rules_to_run)
             
             # --- SMART FALLBACK & SELECTION ---
             # Now we have 'potential_targets'. 
@@ -889,6 +975,12 @@ class Engine:
         all_results = self.analyze_manifest(manifest_path, rules_to_run)
 
         if smali_rules_enabled and target_files:
+            # Append strings.xml results
+            try:
+                if strings_results:
+                    all_results.extend(strings_results)
+            except NameError:
+                pass # strings_results might not be defined if scope skipped
             # Analyze the identified files
             # Note: analyze_file handles reading the file content logic.
             # Does it handle .java? Yes, strictly text read.

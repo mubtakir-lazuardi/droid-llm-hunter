@@ -19,3 +19,4 @@ keywords:
   - "graphql"
   - "query"
   - "GraphQL"
+detection_pattern: "(?i)(graphql.*(query|mutation)|query.*=.*[\"']|mutation.*=.*[\"']|execute.*query)"

@@ -70,9 +70,9 @@ class OpenRouterClient(BaseLLMClient):
         system_prompt = context.get("system_prompt", "")
         vuln_prompt = context.get("vuln_prompt", "")
 
-        formatted_prompt = vuln_prompt.format(
-            code_snippet=code_snippet,
-            file_path=context.get("file_path", "N/A")
-        )
+        # Use .replace() instead of .format() to handle code snippets containing {}
+        # which would otherwise confuse the string formatter.
+        formatted_prompt = vuln_prompt.replace("{code_snippet}", code_snippet)
+        formatted_prompt = formatted_prompt.replace("{file_path}", context.get("file_path", "N/A"))
 
         return f"{system_prompt}\n\n{formatted_prompt}"

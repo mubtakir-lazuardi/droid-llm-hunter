@@ -73,5 +73,50 @@
         "masvs_id": "MASVS-CODE-4",
         "description": "The app validates and sanitizes all untrusted inputs. Ensure that API inputs are validated to prevent injection attacks.",
         "reference": "https://mas.owasp.org/MASVS/controls/MASVS-CODE-4/"
+    },
+    "pending_intent_hijacking": {
+        "masvs_id": "MASVS-PLATFORM-1",
+        "description": "The app uses IPC mechanisms securely. Ensure that PendingIntents are created as immutable where possible to prevent privilege escalation.",
+        "reference": "https://mas.owasp.org/MASVS/controls/MASVS-PLATFORM-1/"
+    },
+    "fragment_injection": {
+        "masvs_id": "MASVS-PLATFORM-1",
+        "description": "The app uses IPC mechanisms securely. Ensure that exported activities with preference headers validate input fragments to prevent RCE.",
+        "reference": "https://mas.owasp.org/MASVS/controls/MASVS-PLATFORM-1/"
+    },
+    "zip_slip": {
+        "masvs_id": "MASVS-CODE-4",
+        "description": "The app validates and sanitizes all untrusted inputs. Ensure that file paths in zip archives are validated during extraction to prevent path traversal.",
+        "reference": "https://mas.owasp.org/MASVS/controls/MASVS-CODE-4/"
+    },
+    "deeplink_logic_bypass": {
+        "masvs_id": "MASVS-PLATFORM-1",
+        "description": "The app uses IPC mechanisms securely. Ensure deep links properly verify authorization state to prevent logic bypass.",
+        "reference": "https://mas.owasp.org/MASVS/controls/MASVS-PLATFORM-1/"
+    },
+    "unsafe_reflection": {
+        "masvs_id": "MASVS-CODE-4",
+        "description": "The app validates and sanitizes all untrusted inputs. Avoid using reflection with untrusted input to prevent code execution.",
+        "reference": "https://mas.owasp.org/MASVS/controls/MASVS-CODE-4/"
+    },
+    "webview_file_access": {
+        "masvs_id": "MASVS-PLATFORM-2",
+        "description": "The app uses WebViews securely. Disable file access in WebViews unless explicitly required and secured.",
+        "reference": "https://mas.owasp.org/MASVS/controls/MASVS-PLATFORM-2/"
+    },
+    "insecure_deserialization": {
+        "masvs_id": "MASVS-CODE-4",
+        "description": "The app validates and sanitizes all untrusted inputs. Avoid deserializing untrusted data to prevent remote code execution.",
+        "reference": "https://mas.owasp.org/MASVS/controls/MASVS-CODE-4/"
+    },
+    "strandhogg": {
+        "masvs_id": "MASVS-PLATFORM-3",
+        "description": "The app uses the user interface securely. Configure launch modes and task affinities to prevent task hijacking attacks.",
+        "reference": "https://mas.owasp.org/MASVS/controls/MASVS-PLATFORM-3/"
+    },
+    "hardcoded_secrets_xml": {
+        "masvs_id": "MASVS-STORAGE-2",
+        "description": "The app prevents leakage of sensitive data. Ensure no sensitive data is stored in resource files like strings.xml.",
+        "reference": "https://mas.owasp.org/MASVS/controls/MASVS-STORAGE-2/"
     }
 }
