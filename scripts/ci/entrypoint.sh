@@ -55,8 +55,23 @@ log_info "Target APK: $FULL_APK_PATH"
 
 if [ ! -f "$FULL_APK_PATH" ]; then
     log_error "APK file not found at: $FULL_APK_PATH"
-    log_info "Listing workspace root for debugging:"
-    ls -F "$WORKSPACE" | head -n 10
+    
+    log_info "---------------- DEBUG INFO ----------------"
+    log_info "Current User: $(whoami) (UID: $(id -u))"
+    log_info "Workspace Mount ($WORKSPACE) permissions:"
+    ls -ld "$WORKSPACE"
+    
+    log_info "Searching for any .apk files in workspace (maxdepth 6)..."
+    FOUND_APKS=$(find "$WORKSPACE" -maxdepth 6 -name "*.apk")
+    
+    if [ -z "$FOUND_APKS" ]; then
+        log_error "No APK files found anywhere in the workspace! configure your 'Build' step correctly?"
+    else
+        log_info "Found the following APK candidates:"
+        echo "$FOUND_APKS"
+        log_info "Please update your 'apk-path' input to match one of the above."
+    fi
+    log_info "--------------------------------------------"
     exit 1
 fi
 

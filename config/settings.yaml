@@ -1,50 +1,60 @@
+# Droid-LLM-Hunter Settings
 analysis:
-  decompiler_mode: hybrid
-  filter_mode: static_only
-  generate_attack_surface_map: true
-  generate_exploit: false
-  use_cross_reference_context: true
+  decompiler_mode: hybrid # hybrid, static_only, or dynamic_only
+  filter_mode: static_only # static_only or dynamic_only
+  generate_attack_surface_map: true # Generate attack surface map
+  generate_exploit: false # Generate PoC scripts for vulnerabilities
+  use_cross_reference_context: true # Use cross reference context
+
+# Apktool Configuration
 apktool:
-  path: apktool
+  path: apktool # Optional: if not in system PATH
+
+# JADX Configuration
 jadx:
-  path: /opt/jadx/bin/jadx
+  path: /opt/jadx/bin/jadx # Absolute path since it might not be in PATH
+
+# LLM Configuration
 llm:
-  anthropic_api_key: ANTHROPIC_API_KEY
-  anthropic_model: claude-sonnet-4-20250514
-  api_key: dummy_key
-  gemini_model: gemini-2.0-flash
-  groq_api_key: GROQ_API_KEY
-  groq_model: llama-3.1-8b-instant
-  model: llama3:8b
-  ollama_url: http://localhost:11434
-  openai_api_key: OPENAI_API_KEY
-  openai_model: gpt-4-turbo
-  openrouter_api_key: OPENROUTER_API_KEY
-  openrouter_model: google/gemini-2.5-flash
-  provider: gemini
+  provider: ollama # or "ollama" or "gemini" or "groq" or "openai" or "anthropic"
+  anthropic_api_key: ANTHROPIC_API_KEY  # Replace with your Anthropic API key
+  anthropic_model: claude-sonnet-4-20250514 # default model for anthropic or "claude-sonnet-4-5-20250929"
+  api_key: GEMINI_API_KEY # Replace with your Gemini API key
+  gemini_model: gemini-2.0-flash # default model for gemini or "gemini-2.5-flash"
+  groq_api_key: GROQ_API_KEY # Replace with your Groq API key
+  groq_model: llama-3.1-8b-instant # default model for groq or "llama-3.3-70b-versatile"
+  model: llama3:8b # default model for ollama or "llama3.1:8b"
+  ollama_url: http://localhost:11434 # default url for ollama
+  openai_api_key: OPENAI_API_KEY # Replace with your OpenAI API key
+  openai_model: gpt-4-turbo # default model for openai or "gpt-4-turbo"
+  openrouter_api_key: OPENROUTER_API_KEY # Replace with your OpenRouter API key
+  openrouter_model: google/gemini-2.5-flash #  default model for openrouter or "google/gemini-2.5-pro"
+
+# Analysis Rules
+# Enable or disable specific vulnerability checks
 rules:
-  biometric_bypass: false
-  deeplink_hijack: false
-  deeplink_logic_bypass: false
-  exported_components: false
-  fragment_injection: false
-  graphql_injection: false
-  hardcoded_secrets: false
-  hardcoded_secrets_xml: false
-  insecure_deserialization: true
-  insecure_file_permissions: false
-  insecure_random_number_generation: false
-  insecure_storage: false
-  insecure_webview: false
-  intent_spoofing: false
-  jetpack_compose_security: false
-  path_traversal: false
-  pending_intent_hijacking: false
-  sql_injection: true
-  strandhogg: false
-  universal_logic_flaw: false
-  unsafe_reflection: false
-  webview_deeplink: false
-  webview_file_access: false
-  webview_xss: false
-  zip_slip: false
+  biometric_bypass: false # Insecure onAuthenticationFailed logic
+  deeplink_hijack: false # Missing autoVerify in Intent Filters
+  deeplink_logic_bypass: false # IDOR/Auth bypass via Deep Links
+  exported_components: false # Activities/Services exposed to public
+  fragment_injection: false # PreferenceActivity remote code execution
+  graphql_injection: false # Dynamic GraphQL query construction
+  hardcoded_secrets: false # Critical API Keys & Secrets in code
+  hardcoded_secrets_xml: false # Secrets hidden in strings.xml
+  insecure_deserialization: true # RCE via ObjectInputStream.readObject
+  insecure_file_permissions: false # World-readable files/SharedPreferences
+  insecure_random_number_generation: false # Weak PRNG (java.util.Random)
+  insecure_storage: false # Plain-text credentials in XML/Files
+  insecure_webview: false # Dangerous WebSettings (FileAccess)
+  intent_spoofing: false # Unauthorized Broadcast Receivers
+  jetpack_compose_security: false # Debug flags in Compose UI
+  path_traversal: false # Local File Inclusion via ContentProvider
+  pending_intent_hijacking: false # Mutable PendingIntent privilege escalation
+  sql_injection: true # Database manipulation via rawQuery/execSQL
+  strandhogg: false  # Task affinity & launch mode hijacking
+  universal_logic_flaw: false # LLM-only conceptual logic analysis
+  unsafe_reflection: false # RCE via Class.forName/Method.invoke
+  webview_deeplink: false # Modern XSS vector & Open Redirect
+  webview_file_access: false # Cookie theft via local file access
+  webview_xss: false # JavaScriptInterface & WebView configurations
+  zip_slip: false # Path traversal during Zip extraction
