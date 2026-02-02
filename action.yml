@@ -14,6 +14,15 @@ inputs:
   api-key:
     description: "API Key for the chosen provider."
     required: true
+  rules:
+    description: "Comma-separated list of rules to enable/disable (e.g., 'sql_injection:true, webview_xss:false')."
+    required: false
+  profile:
+    description: "Name of a predefined profile to use."
+    required: false
+  config-path:
+    description: "Path to a custom configuration YAML file (relative to repository root)."
+    required: false
 runs:
   using: "docker"
   image: "Dockerfile"
