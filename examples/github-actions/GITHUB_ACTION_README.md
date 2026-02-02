@@ -4,7 +4,7 @@ This action allows you to integrate **Droid LLM Hunter** directly into your GitH
 
 ## Usage
 
-### Pre-requisites
+### Prerequisites
 
 1.  **Build your APK**: Your workflow must build the APK first (e.g., using `gradlew`).
 2.  **API Key**: You need an API key for your chosen LLM provider (Gemini, OpenAI, etc.) stored in GitHub Secrets.
