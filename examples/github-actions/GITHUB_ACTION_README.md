@@ -47,7 +47,7 @@ jobs:
         run: ./gradlew assembleDebug
 
       - name: Droid LLM Hunter Scan
-        uses: roomkangali/droid-llm-hunter@main # Replace with tag/version if available
+        uses: roomkangali/droid-llm-hunter@v1.1.6 # Replace with tag/version if available
         with:
           apk-path: app/build/outputs/apk/debug/app-debug.apk
           provider: "gemini"

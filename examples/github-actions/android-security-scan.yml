@@ -43,7 +43,7 @@ jobs:
       # 6. Run Security Scan
       # REPLACE THE VERSION TAG WITH THE LATEST RELEASE
       - name: Droid LLM Hunter Scan
-        uses: mubtakir-lazuardi/droid-llm-hunter@v1.1.11
+        uses: roomkangali/droid-llm-hunter@v1.1.11
         with:
           apk-path: app/build/outputs/apk/debug/app-debug.apk
           provider: gemini
