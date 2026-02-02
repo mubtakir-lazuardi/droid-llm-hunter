@@ -12,7 +12,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     unzip \
     curl \
+    unzip \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Force JAVA_HOME to the container's internal JDK
+# This prevents GitHub Actions runner from overriding it with the host's path
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+ENV PATH="$JAVA_HOME/bin:$PATH"
 
 # Install Apktool
 ENV APKTOOL_VERSION=2.12.1
