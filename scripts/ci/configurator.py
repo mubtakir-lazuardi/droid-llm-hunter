@@ -142,6 +142,10 @@ def apply_rule_settings(settings: Dict[str, Any]) -> None:
     # Rules format: "rule_name:true, other_rule:false"
     try:
         rules_list = [r.strip() for r in rules_input.split(",")]
+
+        # Get valid rule keys from the loaded settings
+        valid_rules = set(settings.get("rules", {}).keys())
+
         for rule_entry in rules_list:
             if ":" not in rule_entry:
                 logger.warning(
@@ -152,6 +156,13 @@ def apply_rule_settings(settings: Dict[str, Any]) -> None:
             name, value = rule_entry.split(":", 1)
             name = name.strip()
             value = value.strip().lower()
+
+            # Validation: Check if rule exists based on default settings
+            if name not in valid_rules:
+                logger.warning(
+                    f"Unknown rule ignored: '{name}'. Did you mean one of: {list(valid_rules)[:5]}...?"
+                )
+                continue
 
             if value in ("true", "1", "yes"):
                 settings["rules"][name] = True

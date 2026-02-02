@@ -25,11 +25,18 @@ if [ -n "$JAVA_HOME" ]; then
     unset JAVA_HOME
 fi
 
-# Re-define internal JAVA_HOME explicitly
-export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
+# Re-define internal JAVA_HOME explicitly using dynamic resolution (Supports AMD64 & ARM64)
+JAVA_BIN=$(which java)
+if [ -z "$JAVA_BIN" ]; then
+    log_error "Java binary not found in PATH! Docker image might be corrupt."
+    exit 1
+fi
+# Resolve full path (e.g., /usr/lib/jvm/java-21-openjdk-amd64/bin/java)
+REAL_JAVA_BIN=$(readlink -f "$JAVA_BIN")
+export JAVA_HOME=$(dirname $(dirname "$REAL_JAVA_BIN"))
 export PATH="$JAVA_HOME/bin:$PATH"
 
-log_info "Forced JAVA_HOME to: $JAVA_HOME"
+log_info "Resolved JAVA_HOME to: $JAVA_HOME"
 # Verify Java version
 java -version 2>&1 | head -n 1 | grep -q "version" && log_info "Java check: OK" || log_error "Java check: FAILED"
 
@@ -79,10 +86,10 @@ if [ ! -f "$FULL_APK_PATH" ]; then
     log_info "---------------- DEBUG INFO ----------------"
     log_info "Current User: $(whoami) (UID: $(id -u))"
     log_info "Workspace Mount ($WORKSPACE) permissions:"
-    ls -ld "$WORKSPACE"
+    ls -ld "$WORKSPACE" || true
     
     log_info "Searching for any .apk files in workspace (maxdepth 6)..."
-    FOUND_APKS=$(find "$WORKSPACE" -maxdepth 6 -name "*.apk")
+    FOUND_APKS=$(find "$WORKSPACE" -maxdepth 6 -name "*.apk" || true)
     
     if [ -z "$FOUND_APKS" ]; then
         log_error "No APK files found anywhere in the workspace! configure your 'Build' step correctly?"

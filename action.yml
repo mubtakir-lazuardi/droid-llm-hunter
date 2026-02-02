@@ -13,7 +13,7 @@ inputs:
     required: false
   api-key:
     description: "API Key for the chosen provider."
-    required: true
+    required: false
   rules:
     description: "Comma-separated list of rules to enable/disable (e.g., 'sql_injection:true, webview_xss:false')."
     required: false
