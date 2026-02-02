@@ -537,7 +537,7 @@ We provide a **Gold Standard** workflow example that includes:
 - Running Droid LLM Hunter with specific rules.
 - Uploading the security report as an artifact.
 
-👉 **[View the Professional Workflow Example](examples/android-security-scan.yml)**
+👉 **[View the Professional Workflow Example](examples/github-actions/android-security-scan.yml)**
 
 #### Key Features in CI/CD:
 
