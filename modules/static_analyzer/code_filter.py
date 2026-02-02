@@ -3,9 +3,10 @@ from typing import List
 from core import log
 
 class CodeFilter:
-    def __init__(self, decompiled_dir: str, mode: str = "smali", additional_keywords: List[str] = None):
+    def __init__(self, decompiled_dir: str, mode: str = "smali", additional_keywords: List[str] = None, additional_regex: List[str] = None, strict_mode: bool = False):
         self.decompiled_dir = decompiled_dir
         self.mode = mode
+        self.additional_regex = additional_regex if additional_regex else []
         
         self.smali_keywords = [
             "Landroid/webkit/WebView;",
@@ -47,13 +48,30 @@ class CodeFilter:
         ]
         
         # Merge built-in keywords with any dynamic additional keywords
-        base_keywords = self.java_keywords if mode == "java" else self.smali_keywords
+        if strict_mode:
+            # In strict mode (Hybrid), we IGNORE the default hardcoded keywords
+            # and rely ONLY on what the Rules provide (keywords or regex).
+            base_keywords = []
+        else:
+            # In legacy mode, we include the default "catch-all" keywords
+            base_keywords = self.java_keywords if mode == "java" else self.smali_keywords
+            
         self.keywords = base_keywords + (additional_keywords if additional_keywords else [])
         self.extension = ".java" if mode == "java" else ".smali"
 
+        # Compilation of regex for performance
+        import re
+        self.compiled_patterns = []
+        if self.additional_regex:
+             for p in self.additional_regex:
+                 try:
+                     self.compiled_patterns.append(re.compile(p))
+                 except re.error as e:
+                     log.warning(f"Invalid regex pattern skipped: {p} ({e})")
+
     def find_high_value_targets(self) -> List[str]:
         high_value_files = []
-        log.info(f"Starting keyword search in {self.decompiled_dir} (Mode: {self.mode})...")
+        log.info(f"Starting keyword/regex search in {self.decompiled_dir} (Mode: {self.mode})...")
         for root, _, files in os.walk(self.decompiled_dir):
             for file in files:
                 if file.endswith(self.extension):
@@ -61,7 +79,20 @@ class CodeFilter:
                     try:
                         with open(file_path, "r", encoding="utf-8") as f:
                             content = f.read()
+                        
+                        # Check Keywords
+                        matched = False
                         if any(keyword in content for keyword in self.keywords):
+                            matched = True
+                        
+                        # Check Regex Patterns (if not already matched)
+                        if not matched and self.compiled_patterns:
+                            for pattern in self.compiled_patterns:
+                                if pattern.search(content):
+                                    matched = True
+                                    break
+                        
+                        if matched:
                             high_value_files.append(file_path)
                             log.debug(f"Found high-value target: {file_path}")
                     except Exception as e:

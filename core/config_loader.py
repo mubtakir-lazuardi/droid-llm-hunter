@@ -14,6 +14,8 @@ class LLMSettings(BaseModel):
     openai_api_key: Optional[str] = None
     anthropic_model: Optional[str] = None
     anthropic_api_key: Optional[str] = None
+    openrouter_model: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
 
 class ApktoolSettings(BaseModel):
     path: Optional[str] = None
@@ -47,6 +49,15 @@ class RulesSettings(BaseModel):
     path_traversal: bool
     insecure_webview: bool
     universal_logic_flaw: bool 
+    pending_intent_hijacking: bool
+    fragment_injection: bool
+    zip_slip: bool
+    deeplink_logic_bypass: bool
+    unsafe_reflection: bool
+    webview_file_access: bool
+    insecure_deserialization: bool
+    strandhogg: bool
+    hardcoded_secrets_xml: bool
 
 class Settings(BaseModel):
     llm: LLMSettings

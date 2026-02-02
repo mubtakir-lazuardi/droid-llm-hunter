@@ -16,3 +16,4 @@ prompt: |
 
   Is there a WebView via DeepLink vulnerability in this manifest? If yes, explain the risk and provide a recommendation.
 tags: ["manifest", "deeplink", "webview"]
+detection_pattern: "android\\.intent\\.action\\.VIEW"

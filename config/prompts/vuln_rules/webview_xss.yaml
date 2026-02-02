@@ -14,3 +14,4 @@ prompt: |
 
   Is there a potential XSS vulnerability in this WebView implementation? If yes, explain the risk and recommend mitigation strategies like disabling JavaScript if not needed, or sanitizing input.
 tags: ["webview", "xss", "javascript"]
+detection_pattern: "setJavaScriptEnabled\\(true\\)|addJavascriptInterface"

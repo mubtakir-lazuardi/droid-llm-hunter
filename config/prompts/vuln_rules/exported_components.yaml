@@ -14,3 +14,4 @@ prompt: |
 
   Are there any exported components without a permission in this manifest? If yes, list them and explain the risk.
 tags: ["manifest", "exported", "permission"]
+detection_pattern: "android:exported=[\"']true[\"']"

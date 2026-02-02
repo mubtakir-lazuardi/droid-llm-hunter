@@ -23,6 +23,7 @@ prompt: |
 
   If you find a Logic Flaw, explain the "Kill Chain" (How to trigger it). If the code is robust, say "Safe".
 tags: ["logic_flaw", "ipc", "reflection", "business_logic", "serialization"]
+detection_pattern: "(Parcel|Serializable|Method\\.invoke|Class\\.forName|payment|admin|transfer|balance|shouldOverrideUrlLoading)"
 keywords:
   - "Parcel"
   - "Serializable"

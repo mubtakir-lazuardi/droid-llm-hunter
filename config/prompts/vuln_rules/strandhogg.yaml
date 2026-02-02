@@ -1,0 +1,24 @@
+name: "StrandHogg (Task Hijacking)"
+description: "Detects Task Hijacking (StrandHogg) vulnerabilities in AndroidManifest configuration."
+prompt: |
+  Analyze the following AndroidManifest.xml snippet for StrandHogg vulnerabilities.
+  
+  Vulnerability Pattern:
+  - Activity has `android:launchMode="singleTask"`.
+  - AND `android:taskAffinity` is NOT defined (inherits package name) OR is explicitly empty/custom.
+  - AND `android:exported="true"`.
+  - This configuration allows a malicious app to insert its activity into the victim's task stack (Task Hijacking).
+  
+  Code to Analyze:
+  ```xml
+  {code_snippet}
+  ```
+  
+  Context:
+  - File Path: {file_path}
+  
+  Determine if the Activity configuration permits Task Hijacking (StrandHogg).
+keywords:
+  - "singleTask"
+  - "taskAffinity"
+tags: ["manifest", "strandhogg", "task_hijacking"]

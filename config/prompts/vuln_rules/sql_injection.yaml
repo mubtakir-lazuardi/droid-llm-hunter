@@ -14,3 +14,4 @@ prompt: |
 
   Is there a SQL Injection vulnerability in this code? If yes, explain how to exploit it and provide a remediated code snippet using parameterized queries.
 tags: ["sql", "database", "injection"]
+detection_pattern: "(rawQuery|execSQL)\\s*\\("

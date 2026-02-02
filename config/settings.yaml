@@ -13,6 +13,8 @@ llm:
   openai_api_key: "OPENAI_API_KEY" # Replace with your OpenAI API key
   anthropic_model: "claude-sonnet-4-20250514" # default model for anthropic or "claude-sonnet-4-5-20250929"
   anthropic_api_key: "ANTHROPIC_API_KEY" # Replace with your Anthropic API key
+  openrouter_model: "google/gemini-2.5-flash" #  default model for openrouter or "google/gemini-2.5-pro"
+  openrouter_api_key: "OPENROUTER_API_KEY" # Replace with your Openrouter API key
 
 # Apktool Configuration
 apktool:
@@ -27,25 +29,34 @@ analysis:
   generate_attack_surface_map: true # Generate Attack Surface Map
   use_cross_reference_context: true # Use Cross Reference Context
   filter_mode: "hybrid" # static_only, llm_only, hybrid
-  decompiler_mode: "apktool" # Options: apktool (default), jadx, hybrid
+  decompiler_mode: "hybrid" # Options: apktool (default), jadx, hybrid
   generate_exploit: false # Generate PoC scripts for vulnerabilities
   
 # Analysis Rules
 # Enable or disable specific vulnerability checks
 rules:
-  sql_injection: false
-  webview_xss: false
-  hardcoded_secrets: false
-  webview_deeplink: true
-  insecure_file_permissions: false
-  intent_spoofing: false
-  insecure_random_number_generation: false
-  jetpack_compose_security: false
-  biometric_bypass: false
-  graphql_injection: false
-  exported_components: false
-  deeplink_hijack: false
-  insecure_storage: false
-  path_traversal: false
-  insecure_webview: false
-  universal_logic_flaw: false 
+  sql_injection: false           # Database manipulation via rawQuery/execSQL
+  webview_xss: false              # JavaScriptInterface & WebView configurations
+  hardcoded_secrets: false        # Critical API Keys & Secrets in code
+  webview_deeplink: false         # Modern XSS vector & Open Redirect
+  insecure_file_permissions: false # World-readable files/SharedPreferences
+  intent_spoofing: false         # Unauthorized Broadcast Receivers
+  insecure_random_number_generation: false # Weak PRNG (java.util.Random)
+  jetpack_compose_security: false # Debug flags in Compose UI
+  biometric_bypass: false        # Insecure onAuthenticationFailed logic
+  graphql_injection: false       # Dynamic GraphQL query construction
+  exported_components: false     # Activities/Services exposed to public
+  deeplink_hijack: false         # Missing autoVerify in Intent Filters
+  insecure_storage: false        # Plain-text credentials in XML/Files
+  path_traversal: false          # Local File Inclusion via ContentProvider
+  insecure_webview: false        # Dangerous WebSettings (FileAccess)
+  universal_logic_flaw: false    # LLM-only conceptual logic analysis
+  pending_intent_hijacking: false # Mutable PendingIntent privilege escalation
+  fragment_injection: false      # PreferenceActivity remote code execution
+  zip_slip: false                # Path traversal during Zip extraction
+  deeplink_logic_bypass: false   # IDOR/Auth bypass via Deep Links
+  unsafe_reflection: false       # RCE via Class.forName/Method.invoke
+  webview_file_access: false     # Cookie theft via local file access
+  insecure_deserialization: true # RCE via ObjectInputStream.readObject
+  strandhogg: false              # Task affinity & launch mode hijacking
+  hardcoded_secrets_xml: false   # Secrets hidden in strings.xml

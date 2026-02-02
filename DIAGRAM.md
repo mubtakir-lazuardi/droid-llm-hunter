@@ -1,4 +1,4 @@
-# Droid LLM Hunter - Scan Workflow (V1.1.3)
+# Droid LLM Hunter - Scan Workflow
 
 ```text
 +-------------------------------------------------------+
@@ -12,7 +12,7 @@
                        |
                        v
 +----------------------+--------------------------------+
-|  PHASE 2: SMART SCOPE PROTECTION (The Immune System)  |  <-- [NEW v1.1.3]
+|  PHASE 2: SMART SCOPE PROTECTION (The Immune System)  |  <-- [v1.1.3]
 |                                                       |
 |  [ All Smali/Java Files ]                             |
 |          |                                            |
@@ -27,21 +27,30 @@
                        |
                        v
 +----------------------+--------------------------------+
-|  PHASE 3: DISCOVERY & RISK ID (Pass 1)                |
++----------------------+--------------------------------+
+|  PHASE 3: DISCOVERY & RISK ID (Hybrid Pass)           |
 |                                                       |
 |    [ Loop: Analyze Relevant Files ]                   |
 |                 |                                     |
 |                 v                                     |
-|      [ LLM / Static Scan ] -> [ Validate Finding ]    |
-|                 |                                     |
-|                 v                                     |
-|         [ Store in Knowledge Base ]                   |
-|       (Do NOT Generate Exploits Yet)                  |
+|    [ REGEX FILTER (Zero Cost) ]                       |  <-- [NEW v1.1.5]
+|    (Match 'detection_pattern'?)                       |
+|       NO |             | YES                          |
+|          v             v                              |
+|       [ Skip ]      [ LLM VERIFICATION ]              |
+|                     (Context & Logic Check)           |
+|                                |                      |
+|                                v                      |
+|                     [ Validate Finding ]              |
+|                                |                      |
+|                                v                      |
+|                     [ Store in Knowledge Base ]       |
+|                   (Do NOT Generate Exploits Yet)      |
 +----------------------+--------------------------------+
                        |
                        v
 +----------------------+--------------------------------+
-|  PHASE 4: INTELLIGENT CHAINING (Pass 2)               |  <-- [NEW v1.1.3]
+|  PHASE 4: INTELLIGENT CHAINING (Pass 2)               |  <-- [v1.1.3]
 |                                                       |
 |      [ Build Global Context ]                         |
 |   (Summarize all findings from Phase 3)               |

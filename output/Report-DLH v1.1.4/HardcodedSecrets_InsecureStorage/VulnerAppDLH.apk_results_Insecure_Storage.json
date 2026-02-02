@@ -1,0 +1,196 @@
+{
+  "app_summary": "# VulnerApp DLH - Comprehensive Application Summary\n\n## Core Functionality\n**VulnerApp DLH is a deliberately vulnerable security training application** designed for educational purposes to demonstrate common mobile security weaknesses. The app contains multiple modules that showcase different types of security vulnerabilities, including:\n\n- Secrets and credential management challenges\n- WebView exploitation scenarios\n- SQL injection demonstrations\n- File handling vulnerabilities\n- Cryptographic and authentication flaws\n- GraphQL injection examples\n- Inter-Process Communication (IPC) vulnerabilities\n\n## Security Features\n\n### Authentication Methods\n- **Biometric Authentication**: Implements fingerprint/biometric authentication (with intentional bypass vulnerabilities)\n- **Credential-based Login**: Basic username/password authentication system\n- **Session Management**: Weak session token generation using insecure random numbers\n\n### Cryptography Usage\n- **Insecure Random Number Generation**: Uses weak randomization for session tokens\n- **Client-side Security Controls**: Implements bypassable VIP status validation\n- **Hardcoded Secrets**: Contains AWS keys and API tokens embedded in source code\n\n## Data Handling\n\n### Sensitive Data Collected/Stored\n- **User Credentials**: Usernames and passwords stored in plaintext\n- **AWS Keys and API Tokens**: Hardcoded in application source\n- **Session Tokens**: Generated using weak cryptographic methods\n- **User Secrets**: Stored in SQLite database vulnerable to injection\n- **VIP Status Information**: Client-side validation bypass possible\n- **File Data**: Created with world-readable permissions\n\n### Storage Vulnerabilities\n- **Plaintext Storage**: Credentials stored without encryption in SharedPreferences\n- **Insecure File Permissions**: Files created with world-readable access\n- **Unprotected Database**: SQLite operations vulnerable to injection attacks\n\n## Permissions\n\n### Declared Permissions\n- **`android.permission.USE_BIOMETRIC`**: Enables biometric authentication features\n- **`android.permission.USE_FINGERPRINT`**: Legacy fingerprint authentication support\n- **Custom signature-level permission**: `com.dlh.vulnerapp.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`\n\n### Notable Security Concerns\n- **All Activities Exported**: Every activity is marked as `exported=\"true\"`, making them accessible to external applications\n- **Unprotected Broadcast Receiver**: `SpoofableReceiver` can receive password reset actions from any application\n- **Deep Link Vulnerabilities**: WebView activity accepts arbitrary URLs via `dlh://webview` scheme\n- **IPC Exposure**: UnprotectedExportedActivity accepts any host via `vulnerapp://*` scheme\n\n## Key Vulnerabilities Summary\n\n1. **MASVS-STORAGE**: Plaintext credential storage, insecure file permissions, SQL injection\n2. **MASVS-AUTH**: Bypassable biometric authentication, weak session management, client-side controls\n3. **MASVS-CRYPTO**: Weak random number generation, hardcoded secrets\n4. **MASVS-NETWORK**: Insecure WebView configuration, universal file access\n5. **MASVS-PLATFORM**: Exposed JavaScript interfaces, unprotected exported components\n\nThis application serves as a comprehensive training tool for identifying and understanding common mobile security vulnerabilities in Android applications.",
+  "attack_surface_map": "Based on the AndroidManifest.xml and code summaries, here's the attack surface map for this application:\n\n## Attack Surface Map\n\n### 1. Exported Activities (Direct Access Points)\n\n**MainActivity**\n- **Entry Point**: `com.dlh.vulnerapp.MainActivity`\n- **Access**: Direct component access via Intent\n- **Risk**: Application entry point, potential for unauthorized access\n\n**SecretsActivity** \n- **Entry Point**: `com.dlh.vulnerapp.SecretsActivity`\n- **Access**: Direct component access via Intent\n- **Attack Vectors**:\n  - Hardcoded credentials extraction (AWS keys, API tokens)\n  - Plaintext credential storage in SharedPreferences\n  - Authentication bypass attempts\n\n**WebViewActivity**\n- **Entry Point**: `com.dlh.vulnerapp.WebViewActivity`\n- **Access**: Direct component access + Deep link (`dlh://webview`)\n- **Attack Vectors**:\n  - Malicious URL injection via deep links\n  - JavaScript injection through WebView\n  - File system access via universal file access\n  - JavaScript bridge exploitation to extract secrets\n  - Cross-site scripting (XSS) attacks\n\n**SQLInjectionActivity**\n- **Entry Point**: `com.dlh.vulnerapp.SQLInjectionActivity`\n- **Access**: Direct component access via Intent\n- **Attack Vectors**:\n  - SQL injection via user input fields\n  - Database content extraction\n  - Unauthorized data manipulation\n\n**InsecureFileActivity**\n- **Entry Point**: `com.dlh.vulnerapp.InsecureFileActivity`\n- **Access**: Direct component access via Intent\n- **Attack Vectors**:\n  - World-readable file creation exploitation\n  - Unauthorized file access\n  - Sensitive data extraction from files\n\n**CryptoActivity**\n- **Entry Point**: `com.dlh.vulnerapp.CryptoActivity`\n- **Access**: Direct component access via Intent\n- **Attack Vectors**:\n  - Client-side VIP status bypass\n  - Weak session token prediction\n  - Biometric authentication bypass\n\n**GraphQLInjectionActivity**\n- **Entry Point**: `com.dlh.vulnerapp.GraphQLInjectionActivity`\n- **Access**: Direct component access via Intent\n- **Attack Vectors**:\n  - GraphQL injection attacks\n  - Query manipulation\n\n**UnprotectedExportedActivity**\n- **Entry Point**: `com.dlh.vulnerapp.UnprotectedExportedActivity`\n- **Access**: Direct component access + Deep link (`vulnerapp://*`)\n- **Attack Vectors**:\n  - IPC vulnerability exploitation\n  - Arbitrary host deep link injection\n  - Intent data manipulation\n\n### 2. Exported Broadcast Receivers\n\n**SpoofableReceiver**\n- **Entry Point**: `com.dlh.vulnerapp.SpoofableReceiver`\n- **Trigger**: Broadcast Intent with action `com.dlh.vulnerapp.ACTION_RESET_PASSWORD`\n- **Attack Vectors**:\n  - Password reset spoofing\n  - Unauthorized password reset triggers\n  - Intent data manipulation\n\n**ProfileInstallReceiver**\n- **Entry Point**: `androidx.profileinstaller.ProfileInstallReceiver`\n- **Trigger**: Various profile installer actions\n- **Attack Vectors**:\n  - Profile manipulation (requires DUMP permission)\n  - System-level interference\n\n### 3. Deep Link Attack Vectors\n\n**WebView Deep Links**\n- **Scheme**: `dlh://webview`\n- **Attack Vectors**:\n  - Arbitrary URL loading\n  - Malicious website redirection\n  - JavaScript payload injection\n\n**IPC Deep Links**\n- **Scheme**: `vulnerapp://*` (wildcard host)\n- **Attack Vectors**:\n  - Arbitrary host exploitation\n  - Intent parameter injection\n  - Cross-app communication hijacking\n\n### 4. Data Storage Attack Vectors\n\n**SharedPreferences**\n- **Location**: SecretsActivity credential storage\n- **Attack Vectors**:\n  - Plaintext credential extraction\n  - Root/backup-based data access\n\n**SQLite Database**\n- **Location**: SQLInjectionActivity database\n- **Attack Vectors**:\n  - SQL injection-based data extraction\n  - Direct database file access\n\n**File System**\n- **Location**: InsecureFileActivity world-readable files\n- **Attack Vectors**:\n  - Direct file access from other apps\n  - Sensitive data leakage\n\n### 5. Network Communication Attack Vectors\n\n**WebView Network Requests**\n- **Attack Vectors**:\n  - Man-in-the-middle attacks\n  - Malicious content loading\n  - Certificate bypass\n\n### 6. User Input Attack Vectors\n\n**SQL Query Input** (SQLInjectionActivity)\n- **Attack Vectors**:\n  - SQL injection payloads\n  - Database manipulation\n\n**File Path Input** (InsecureFileActivity)\n- **Attack Vectors**:\n  - Path traversal attacks\n  - Arbitrary file access\n\n**WebView URL Input** (WebViewActivity)\n- **Attack Vectors**:\n  - Malicious URL injection\n  - JavaScript payload delivery\n\n**Authentication Input** (SecretsActivity, CryptoActivity)\n- **Attack Vectors**:\n  - Credential brute forcing\n  - Authentication bypass\n\n### 7. Configuration Vulnerabilities\n\n**Application Level**\n- `android:allowBackup=\"true\"` - Backup-based data extraction\n- `android:debuggable=\"true\"` - Debug interface exploitation\n- Universal file access in WebView - File system access\n\nThis attack surface map shows multiple high-risk entry points, with the exported activities and deep links providing the primary attack vectors for exploitation of the underlying vulnerabilities in storage, authentication, and data handling.",
+  "results": [
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/CryptoActivity.java",
+      "vulnerability": "Hardcoded Secrets",
+      "status": "Not Vulnerable",
+      "result": {
+        "is_vulnerable": false,
+        "severity": "Info",
+        "confidence": "High",
+        "evidence": "No hardcoded secrets found in the provided code snippet",
+        "description": "The code does not contain any hardcoded sensitive data such as API keys, passwords, encryption keys, or other credentials. The code primarily handles UI interactions and contains weak cryptographic practices, but no actual secrets are hardcoded in the source.",
+        "attack_scenario": "No attack scenario applicable as no hardcoded secrets are present in this code snippet.",
+        "attacker_priority": "LOW",
+        "recommendation": "While no hardcoded secrets were found, ensure that any future additions of API keys, passwords, or encryption keys are stored securely using Android Keystore system or EncryptedSharedPreferences rather than hardcoding them in the source code.",
+        "false_positive_analysis": "This analysis is based solely on the provided code snippet. There could be hardcoded secrets in other parts of the application, imported libraries, or configuration files that are not visible in this particular class. The analysis is limited to the CryptoActivity.java file and cannot account for secrets that might be passed from other components or stored in resources, manifest files, or native libraries."
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/CryptoActivity.java",
+      "vulnerability": "Insecure Storage",
+      "status": "Not Vulnerable",
+      "result": {
+        "is_vulnerable": false,
+        "severity": "Info",
+        "confidence": "High",
+        "evidence": "No SharedPreferences usage or file operations found in the code snippet",
+        "description": "The provided code snippet does not contain any SharedPreferences operations with MODE_WORLD_READABLE or world-readable file creation. The code only performs UI operations, displays text in TextView components, and shows Toast messages. No sensitive data is being stored to persistent storage mechanisms.",
+        "attack_scenario": "No attack scenario applicable as no insecure storage vulnerabilities are present in this specific code snippet.",
+        "attacker_priority": "LOW",
+        "recommendation": "No remediation needed for insecure storage in this specific code snippet. However, ensure that any future storage operations use secure mechanisms like EncryptedSharedPreferences or Android Keystore for sensitive data.",
+        "false_positive_analysis": "This could be a false negative if other parts of the application (not shown in this snippet) contain insecure storage implementations. The CryptoActivity class may interact with other components that handle storage operations. Additionally, the method implementations suggest this is a vulnerable demo app ('VulnerApp'), so insecure storage might exist in other classes or methods not included in this snippet."
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/SecretsActivity.java",
+      "vulnerability": "Hardcoded Secrets",
+      "status": "Vulnerable",
+      "result": {
+        "is_vulnerable": true,
+        "severity": "Critical",
+        "confidence": "High",
+        "evidence": "private final String AWS_ACCESS_KEY = \"AKIAIOSFODNN7EXAMPLE\";\nprivate final String AWS_SECRET_KEY = \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\";\nprivate final String API_TOKEN = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.Et9HF98yRYq\";",
+        "description": "The application contains hardcoded sensitive credentials including AWS access keys and API tokens directly embedded in the source code. These secrets are stored as private final String variables and are logged/displayed in the application, making them easily discoverable through reverse engineering of the APK file.",
+        "attack_scenario": "Attacker reverse engineers the APK file using tools like jadx or apktool to decompile the application. The hardcoded AWS credentials and API tokens are immediately visible in the decompiled source code, allowing the attacker to use these credentials to access AWS services or APIs with the same privileges as the legitimate application.",
+        "attacker_priority": "HIGH",
+        "recommendation": "Remove all hardcoded secrets from the source code. Use Android Keystore system to securely store encryption keys, implement secure configuration management for API keys (fetch from secure server endpoint), use encrypted SharedPreferences or Android's EncryptedSharedPreferences for sensitive data storage, and implement proper secret management using services like AWS Secrets Manager or similar solutions. Consider using build-time environment variables for non-critical configuration.",
+        "false_positive_analysis": "This is not a false positive. The hardcoded credentials are clearly visible in the source code and are being actively used in the application logic. Even if these appear to be example/dummy credentials based on the 'EXAMPLE' text in the AWS keys, they represent a clear security antipattern that violates MASVS-STORAGE-2. Real applications should never contain any hardcoded secrets regardless of whether they are production or example credentials.",
+        "masvs_reference": {
+          "id": "MASVS-STORAGE-2",
+          "description": "The app prevents leakage of sensitive data. Ensure that no sensitive data, such as API keys or passwords, is hardcoded in the source code.",
+          "link": "https://mas.owasp.org/MASVS/controls/MASVS-STORAGE-2/"
+        }
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/SecretsActivity.java",
+      "vulnerability": "Insecure Storage",
+      "status": "Vulnerable",
+      "result": {
+        "is_vulnerable": true,
+        "severity": "High",
+        "confidence": "High",
+        "evidence": "SharedPreferences sharedPref = this$0.getSharedPreferences(\"UserPrefs\", 0);\n$this$onCreate_u24lambda_u241_u24lambda_u240.putString(\"username\", user);\n$this$onCreate_u24lambda_u241_u24lambda_u240.putString(\"password\", pass);\n$this$onCreate_u24lambda_u241_u24lambda_u240.putString(\"aws_key\", this$0.AWS_ACCESS_KEY);",
+        "description": "The application stores sensitive data (username, password, AWS access key) in SharedPreferences without encryption. While the code uses MODE_PRIVATE (0), the data is still stored in plain text XML files accessible to anyone with root access or physical device access. The hardcoded AWS credentials in the source code are also exposed.",
+        "attack_scenario": "An attacker with root access, physical device access, or through device backup extraction can read the SharedPreferences XML file at /data/data/com.dlh.vulnerapp/shared_prefs/UserPrefs.xml to obtain user credentials and AWS access keys in plain text. Additionally, the hardcoded AWS credentials are exposed in the APK and can be extracted through static analysis.",
+        "attacker_priority": "HIGH",
+        "recommendation": "Use EncryptedSharedPreferences from the Android Jetpack Security library to encrypt sensitive data at rest. Remove hardcoded credentials and use Android Keystore system for secure key storage. Implement proper key derivation and never store passwords in plain text - use secure hashing with salt instead.",
+        "false_positive_analysis": "This is unlikely to be a false positive as the code clearly stores sensitive credentials in plain text SharedPreferences. Even though MODE_PRIVATE is used, this only provides basic app sandboxing and does not encrypt the data. The presence of hardcoded AWS credentials further confirms the vulnerability.",
+        "masvs_reference": {
+          "id": "MASVS-STORAGE-1",
+          "description": "The app securely stores sensitive data. Ensure that sensitive data is stored securely using the Android Keystore system or EncryptedSharedPreferences.",
+          "link": "https://mas.owasp.org/MASVS/controls/MASVS-STORAGE-1/"
+        }
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/InsecureFileActivity.java",
+      "vulnerability": "Hardcoded Secrets",
+      "status": "Vulnerable",
+      "result": {
+        "is_vulnerable": true,
+        "severity": "Medium",
+        "confidence": "High",
+        "evidence": "fOut.write(\"This is a world-readable secret!\".getBytes(Charsets.UTF_8));",
+        "description": "The application contains a hardcoded sensitive string 'This is a world-readable secret!' that is written to a file and made world-readable. This violates MASVS-STORAGE-2 as sensitive data is hardcoded in the source code and can be extracted through static analysis of the APK.",
+        "attack_scenario": "An attacker decompiles the APK file and analyzes the source code to discover the hardcoded secret string. They can then extract this sensitive information without needing to access the device or exploit runtime vulnerabilities. Additionally, since the file is created as world-readable, other applications on the device can access this hardcoded secret.",
+        "attacker_priority": "MEDIUM",
+        "recommendation": "Remove the hardcoded secret from the source code. Store sensitive data using Android Keystore system for cryptographic keys, or EncryptedSharedPreferences for other sensitive data. If the secret must be stored in a file, encrypt it using keys from Android Keystore and ensure proper file permissions (MODE_PRIVATE) are used.",
+        "false_positive_analysis": "This could potentially be a false positive if 'This is a world-readable secret!' is intended as demonstration text for a vulnerable app (as suggested by the package name 'vulnerapp'). However, the presence of any hardcoded sensitive-looking string in production code constitutes a security risk as it demonstrates poor security practices and could be accidentally left in production builds.",
+        "masvs_reference": {
+          "id": "MASVS-STORAGE-2",
+          "description": "The app prevents leakage of sensitive data. Ensure that no sensitive data, such as API keys or passwords, is hardcoded in the source code.",
+          "link": "https://mas.owasp.org/MASVS/controls/MASVS-STORAGE-2/"
+        }
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/InsecureFileActivity.java",
+      "vulnerability": "Insecure Storage",
+      "status": "Vulnerable",
+      "result": {
+        "is_vulnerable": true,
+        "severity": "High",
+        "confidence": "High",
+        "evidence": "FileOutputStream fOut = openFileOutput(\"public_secret.txt\", 1); and file.setReadable(true, false);",
+        "description": "The application creates a world-readable file containing sensitive data. The code uses MODE_WORLD_READABLE (value 1) when creating the file and explicitly sets it as readable by all applications using setReadable(true, false). This allows any application on the device to access the sensitive content 'This is a world-readable secret!'.",
+        "attack_scenario": "Attacker installs a malicious application on the same device that enumerates files in other apps' directories. The malicious app can directly read the 'public_secret.txt' file from this application's private directory and extract the sensitive information without requiring any special permissions.",
+        "attacker_priority": "HIGH",
+        "recommendation": "Remove the MODE_WORLD_READABLE flag and use MODE_PRIVATE (default) instead. Replace 'openFileOutput(\"public_secret.txt\", 1)' with 'openFileOutput(\"public_secret.txt\", MODE_PRIVATE)' or simply 'openFileOutput(\"public_secret.txt\", 0)'. Remove the 'file.setReadable(true, false)' call. For sensitive data, consider using EncryptedFile from Android Jetpack Security library or store sensitive data in EncryptedSharedPreferences.",
+        "false_positive_analysis": "This is not a false positive. The code explicitly uses MODE_WORLD_READABLE (constant value 1) and calls setReadable(true, false) which makes the file accessible to other applications. The file contains data labeled as 'secret', indicating sensitive information. The vulnerability is clearly present in the provided code snippet.",
+        "masvs_reference": {
+          "id": "MASVS-STORAGE-1",
+          "description": "The app securely stores sensitive data. Ensure that sensitive data is stored securely using the Android Keystore system or EncryptedSharedPreferences.",
+          "link": "https://mas.owasp.org/MASVS/controls/MASVS-STORAGE-1/"
+        }
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/SQLInjectionActivity.java",
+      "vulnerability": "Hardcoded Secrets",
+      "status": "Vulnerable",
+      "result": {
+        "is_vulnerable": true,
+        "severity": "Medium",
+        "confidence": "High",
+        "evidence": "db.execSQL(\"INSERT OR IGNORE INTO users (name, secret) VALUES ('admin', 'Flag{SQL_Injection_Success}')\");",
+        "description": "The code contains a hardcoded secret 'Flag{SQL_Injection_Success}' that is directly embedded in the source code. This violates MASVS-STORAGE-2 as sensitive data should not be hardcoded in application source code where it can be easily extracted through reverse engineering.",
+        "attack_scenario": "An attacker reverse engineers the APK file, decompiles the Java code, and discovers the hardcoded flag 'Flag{SQL_Injection_Success}' in the insertDummyData() method. This allows the attacker to obtain sensitive information without even needing to exploit the SQL injection vulnerability.",
+        "attacker_priority": "MEDIUM",
+        "recommendation": "Remove hardcoded secrets from the source code. Use Android Keystore system to securely store sensitive data, or retrieve secrets from a secure remote configuration service. For test/demo data, use dynamically generated values or store them in encrypted preferences using EncryptedSharedPreferences.",
+        "false_positive_analysis": "This appears to be a demonstration/test application based on the package name 'vulnerapp' and the obvious flag format. However, the hardcoded secret still represents a security vulnerability as it demonstrates poor security practices that could be replicated in production code. The vulnerability is legitimate regardless of the application's intended purpose.",
+        "masvs_reference": {
+          "id": "MASVS-STORAGE-2",
+          "description": "The app prevents leakage of sensitive data. Ensure that no sensitive data, such as API keys or passwords, is hardcoded in the source code.",
+          "link": "https://mas.owasp.org/MASVS/controls/MASVS-STORAGE-2/"
+        }
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/SQLInjectionActivity.java",
+      "vulnerability": "Insecure Storage",
+      "status": "Not Vulnerable",
+      "result": {
+        "is_vulnerable": false,
+        "severity": "Info",
+        "confidence": "High",
+        "evidence": "No usage of SharedPreferences with MODE_WORLD_READABLE or world-readable file creation found in the code snippet.",
+        "description": "The code does not contain insecure storage vulnerabilities related to SharedPreferences with MODE_WORLD_READABLE or world-readable file creation. The code uses SQLiteDatabase for data storage, which by default creates private databases accessible only to the application.",
+        "attack_scenario": "No applicable attack scenario for the specified vulnerability pattern. The code uses SQLiteDatabase with default private storage settings.",
+        "attacker_priority": "LOW",
+        "recommendation": "No action required for the specified vulnerability pattern. However, note that this code contains SQL injection vulnerabilities which are outside the scope of this analysis.",
+        "false_positive_analysis": "This analysis specifically looks for SharedPreferences with MODE_WORLD_READABLE and world-readable file creation. The code uses SQLiteDatabase which, by default in Android, creates databases in the app's private directory (/data/data/package_name/databases/) that are only accessible to the application itself. While the code has other security issues (SQL injection), it does not exhibit the specific insecure storage pattern being analyzed."
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/WebViewActivity.java",
+      "vulnerability": "Hardcoded Secrets",
+      "status": "Vulnerable",
+      "result": {
+        "is_vulnerable": true,
+        "severity": "High",
+        "confidence": "High",
+        "evidence": "return \"SUPER_SECRET_TOKEN_FROM_BRIDGE\";",
+        "description": "The application contains a hardcoded secret token 'SUPER_SECRET_TOKEN_FROM_BRIDGE' directly embedded in the source code. This token is returned by a JavaScript interface method that can be called from web content loaded in the WebView, making it accessible to potentially untrusted JavaScript code.",
+        "attack_scenario": "An attacker can reverse engineer the APK file to extract the hardcoded token from the decompiled source code. Additionally, malicious JavaScript loaded in the WebView can call AndroidBridge.getSecrets() to retrieve this sensitive token at runtime, potentially exfiltrating it to external servers.",
+        "attacker_priority": "HIGH",
+        "recommendation": "Remove the hardcoded secret from the source code. Store sensitive tokens securely using Android Keystore system or EncryptedSharedPreferences. Implement proper authentication mechanisms instead of exposing secrets through JavaScript interfaces. If the token must be accessible to JavaScript, implement proper validation and access controls.",
+        "false_positive_analysis": "This is unlikely to be a false positive as the token name 'SUPER_SECRET_TOKEN_FROM_BRIDGE' clearly indicates sensitive information, and it's directly hardcoded as a string literal in the source code. The @JavascriptInterface annotation makes it accessible from web content, increasing the risk exposure.",
+        "masvs_reference": {
+          "id": "MASVS-STORAGE-2",
+          "description": "The app prevents leakage of sensitive data. Ensure that no sensitive data, such as API keys or passwords, is hardcoded in the source code.",
+          "link": "https://mas.owasp.org/MASVS/controls/MASVS-STORAGE-2/"
+        }
+      }
+    },
+    {
+      "file": "output/VulnerAppDLH.apk_decompiled/sources/com/dlh/vulnerapp/WebViewActivity.java",
+      "vulnerability": "Insecure Storage",
+      "status": "Not Vulnerable",
+      "result": {
+        "is_vulnerable": false,
+        "severity": "Info",
+        "confidence": "High",
+        "evidence": "No SharedPreferences with MODE_WORLD_READABLE or world-readable file creation found in the provided code snippet.",
+        "description": "The code snippet does not contain any SharedPreferences usage with MODE_WORLD_READABLE or world-readable file creation. While the code has other security issues (WebView configuration vulnerabilities), it does not exhibit insecure storage patterns as defined by the specific rule.",
+        "attack_scenario": "Not applicable - no insecure storage vulnerability present in this code related to SharedPreferences or world-readable files.",
+        "attacker_priority": "LOW",
+        "recommendation": "No action required for insecure storage vulnerabilities in this specific code snippet. However, consider reviewing the WebView security configurations separately as they present other security risks.",
+        "false_positive_analysis": "This assessment could be a false negative if there are other parts of the application that handle storage operations not visible in this WebViewActivity class. The analysis is limited to the provided code snippet which only contains WebView setup and JavaScript interface methods that return hardcoded values rather than stored sensitive data."
+      }
+    }
+  ]
+}

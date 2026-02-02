@@ -15,3 +15,4 @@ prompt: |
 
   Is there a potential path traversal vulnerability in this code? If yes, explain how it could be exploited and suggest a remediation.
 tags: ["storage", "contentprovider", "path-traversal"]
+detection_pattern: "openFile"

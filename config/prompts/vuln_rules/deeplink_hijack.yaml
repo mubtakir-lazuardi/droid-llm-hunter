@@ -16,3 +16,4 @@ prompt: |
 
   Is there a potential for deep link hijacking or open redirect in this manifest? If yes, explain the risk and provide a recommendation.
 tags: ["manifest", "deeplink", "hijacking", "redirect"]
+detection_pattern: "android:autoVerify|android:scheme"
