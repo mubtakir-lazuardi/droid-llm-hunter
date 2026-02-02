@@ -19,6 +19,20 @@ log_error() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] [ERROR] $1"
 }
 
+# CRITICAL FIX: Unset JAVA_HOME from host to let Docker use its own JDK
+# GitHub Actions runner injects /opt/hostedtoolcache/... which breaks JADX in container
+if [ -n "$JAVA_HOME" ]; then
+    unset JAVA_HOME
+fi
+
+# Re-define internal JAVA_HOME explicitly
+export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+log_info "Forced JAVA_HOME to: $JAVA_HOME"
+# Verify Java version
+java -version 2>&1 | head -n 1 | grep -q "version" && log_info "Java check: OK" || log_error "Java check: FAILED"
+
 log_info "Starting Droid-LLM-Hunter Action..."
 
 # 1. Configure Settings
