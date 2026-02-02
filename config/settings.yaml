@@ -16,10 +16,10 @@ jadx:
 
 # LLM Configuration
 llm:
-  provider: gemini # or "ollama" or "gemini" or "groq" or "openai" or "anthropic"
+  provider: ollama # or "ollama" or "gemini" or "groq" or "openai" or "anthropic"
   anthropic_api_key: ANTHROPIC_API_KEY # Replace with your Anthropic API key
   anthropic_model: claude-sonnet-4-20250514 # default model for anthropic or "claude-sonnet-4-5-20250929"
-  api_key: AIzaSyBRtun4rssrQ92pVGXENIai4hIZeDEgrLI # Replace with your Gemini API key
+  api_key: GEMINI_API_KEY # Replace with your Gemini API key
   gemini_model: gemini-2.0-flash # default model for gemini or "gemini-2.5-flash"
   groq_api_key: GROQ_API_KEY # Replace with your Groq API key
   groq_model: llama-3.1-8b-instant # default model for groq or "llama-3.3-70b-versatile"
