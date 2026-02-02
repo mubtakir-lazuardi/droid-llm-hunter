@@ -6,7 +6,7 @@ inputs:
     required: true
   provider:
     description: "LLM Provider (ollama, gemini, groq, openai, anthropic)."
-    required: true
+    required: false
     default: "gemini"
   model:
     description: "Specific model name to use (e.g., gemini-1.5-pro, gpt-4)."
@@ -16,9 +16,6 @@ inputs:
     required: true
   rules:
     description: "Comma-separated list of rules to enable/disable (e.g., 'sql_injection:true, webview_xss:false')."
-    required: false
-  profile:
-    description: "Name of a predefined profile to use."
     required: false
   config-path:
     description: "Path to a custom configuration YAML file (relative to repository root)."

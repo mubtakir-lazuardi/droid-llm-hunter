@@ -98,7 +98,7 @@ fi
 # 4. Execute Scan
 # =================
 OUTPUT_FILE="$WORKSPACE/droid-llm-report.json"
-FAILED_EXIT_CODE=0
+
 
 log_info "Running Droid-LLM-Hunter scan..."
 

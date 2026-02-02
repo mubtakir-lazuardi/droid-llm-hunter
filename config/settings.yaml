@@ -1,7 +1,7 @@
 # Droid-LLM-Hunter Settings
 analysis:
-  decompiler_mode: hybrid # hybrid, static_only, or dynamic_only
-  filter_mode: static_only # static_only or dynamic_only
+  decompiler_mode: hybrid # hybrid, apktool, or jadx
+  filter_mode: static_only # static_only, llm_only, or hybrid
   generate_attack_surface_map: true # Generate attack surface map
   generate_exploit: false # Generate PoC scripts for vulnerabilities
   use_cross_reference_context: true # Use cross reference context

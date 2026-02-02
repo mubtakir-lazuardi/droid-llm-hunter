@@ -12,8 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     unzip \
     curl \
-    unzip \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Force JAVA_HOME to the container's internal JDK

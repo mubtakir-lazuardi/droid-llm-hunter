@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import yaml
 
 # Configure logging
@@ -87,6 +87,7 @@ def apply_llm_settings(settings: Dict[str, Any]) -> None:
             "groq": "groq_model",
             "openai": "openai_model",
             "anthropic": "anthropic_model",
+            "openrouter": "openrouter_model",
         }
 
         # API Key Configuration Mapping
@@ -95,6 +96,7 @@ def apply_llm_settings(settings: Dict[str, Any]) -> None:
             "groq": "groq_api_key",
             "openai": "openai_api_key",
             "anthropic": "anthropic_api_key",
+            "openrouter": "openrouter_api_key",
         }
 
         # Update Model
