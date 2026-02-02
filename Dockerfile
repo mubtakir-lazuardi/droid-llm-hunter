@@ -36,6 +36,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy Application Source Code
 COPY . .
 
+# Make entrypoint executable
+RUN chmod +x /app/scripts/ci/entrypoint.sh
+
 # Create Output Directory
 RUN mkdir -p /app/output
 
