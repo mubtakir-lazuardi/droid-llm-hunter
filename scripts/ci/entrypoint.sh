@@ -37,7 +37,13 @@ cd /app || { log_error "Failed to change directory to /app"; exit 1; }
 # =================
 # Resolve the APK path relative to the GitHub Workspace mounting point.
 WORKSPACE=${GITHUB_WORKSPACE:-/github/workspace}
+
+# Handle GitHub Actions Input inconsistencies (Dash vs Underscore)
 RAW_APK_PATH="${INPUT_APK_PATH}"
+if [ -z "$RAW_APK_PATH" ]; then
+    # Try reading the hyphenated version which bash vars don't like
+    RAW_APK_PATH=$(printenv "INPUT_APK-PATH")
+fi
 
 if [ -z "$RAW_APK_PATH" ]; then
     log_error "Input 'apk-path' is required but was not provided."
