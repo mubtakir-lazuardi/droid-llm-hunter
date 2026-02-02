@@ -88,23 +88,23 @@ Features **Auto-Exploit Generation**, transforming from a passive scanner into a
 
 ## Features
 
-*   **🧠 Intelligent Analysis Engine:** Droid LLM Hunter goes beyond regex. It breaks down code into chunks, summarizes functionality, and understands context before flagging vulnerabilities, significantly reducing false positives compared to traditional tools.
-*   **⭐ Staged Prompt Architecture:** Uses a specialized pipeline of prompts (Summarization -> Filtering -> Deep Scan) to ensure consistent reasoning and reduce hallucination. [Read the Docs](PROMPT-EXPLANATION.md)
-*   **🔍 Hybrid Filter Modes:** Choose your strategy!
-    *   **`llm_only`:** Maximum accuracy using pure AI analysis.
-    *   **`static_only`:** Blazing fast keyword scanning.
-    *   **`hybrid`:** The best of both worlds Static keywords filter the noise, AI verifies the danger.
-*   **🏗️ Hybrid Architecture (v1.1.5):** A revolutionary "Search -> Regex Filter -> LLM" pipeline that drastically reduces token usage and increases speed. [Read the Docs](ARCHITECTURE_EXPLANATION.md)
-*   **🛠️ Flexible Configuration:** a simple yet powerful configuration file (`config/settings.yaml`) allows for easy management of LLM providers, models, rules, and **Decompiler Settings** (Apktool/JADX).
-*   **🕸️ Context-Aware Scanning:** Utilizes a **Call Graph** to understand file dependencies. Use CrossReference Context to let the AI know *who* calls a function and with *what* arguments. [Read the Docs](CROSS_REFERENCE_CONTEXT.md)
-*   **⚔️ Attack Surface Mapper:** Combines **Manifest Structure** (Exported components) with **Code Logic** (AI Summaries) to identify high-risk entry points (e.g., specific activities processing unvalidated URLs). [Read the Docs](ATTACK_SURFACE_MAPPER.md)
-*   **📚 RAG with OWASP MASVS:** Every finding is automatically enriched with the relevant **OWASP Mobile Application Security Verification Standard (MASVS)** ID (e.g., `MASVS-STORAGE-1`), making your reports audit-ready instantly.
-*   **🤖 Multi-Provider Support:** Run locally with **Ollama** (free & private) or scale up with **Gemini**, **Groq**, **OpenAI**, **Anthropic**, and **OpenRouter**.
-*   **📊 Structured Security Reports:** Get detailed JSON output containing severity, confidence scores, evidence snippets, and even an "Attack Surface Map" of the application.
-*   **💥 Auto-Exploit Generation:** Automatically generates actionable **Proof-of-Concept (PoC)** scripts (Bash, HTML, Python, Js) for confirmed vulnerabilities, proving the impact instantly. [Read the Docs](EXPLOIT_GENERATOR.md)
-*   **🛡️ Smart Scope Protection:** The "Immune System" of the scanner. Automatically filters out library code (e.g., `androidx`, `google`, `r0.java`) using a combination of **Package Whitelisting** (via Manifest) and **Library Blocklisting**. [Read the Docs](EXPLOIT_GENERATOR.md#1-smart-scope-filtering-the-immune-system)
-*   **👑 Cross-Component Chaining:** The "Crown Jewel". Capability that enables the AI to "connect the dots" between different files. It uses a **Two-Pass Analysis** (Discovery -> Global Context -> Execution) to generate chained exploits (e.g., using a token found in File A to exploit File B). [Read the Docs](EXPLOIT_GENERATOR.md#2-cross-component-chaining-the-crown-jewel)
-  *   **📦 XAPK Support:** Direct support for `.xapk` files. The engine automatically handles extraction and selects the main APK for seamless analysis.
+- **🧠 Intelligent Analysis Engine:** Droid LLM Hunter goes beyond regex. It breaks down code into chunks, summarizes functionality, and understands context before flagging vulnerabilities, significantly reducing false positives compared to traditional tools.
+- **⭐ Staged Prompt Architecture:** Uses a specialized pipeline of prompts (Summarization -> Filtering -> Deep Scan) to ensure consistent reasoning and reduce hallucination. [Read the Docs](PROMPT-EXPLANATION.md)
+- **🔍 Hybrid Filter Modes:** Choose your strategy!
+  - **`llm_only`:** Maximum accuracy using pure AI analysis.
+  - **`static_only`:** Blazing fast keyword scanning.
+  - **`hybrid`:** The best of both worlds Static keywords filter the noise, AI verifies the danger.
+- **🏗️ Hybrid Architecture (v1.1.5):** A revolutionary "Search -> Regex Filter -> LLM" pipeline that drastically reduces token usage and increases speed. [Read the Docs](ARCHITECTURE_EXPLANATION.md)
+- **🛠️ Flexible Configuration:** a simple yet powerful configuration file (`config/settings.yaml`) allows for easy management of LLM providers, models, rules, and **Decompiler Settings** (Apktool/JADX).
+- **🕸️ Context-Aware Scanning:** Utilizes a **Call Graph** to understand file dependencies. Use CrossReference Context to let the AI know _who_ calls a function and with _what_ arguments. [Read the Docs](CROSS_REFERENCE_CONTEXT.md)
+- **⚔️ Attack Surface Mapper:** Combines **Manifest Structure** (Exported components) with **Code Logic** (AI Summaries) to identify high-risk entry points (e.g., specific activities processing unvalidated URLs). [Read the Docs](ATTACK_SURFACE_MAPPER.md)
+- **📚 RAG with OWASP MASVS:** Every finding is automatically enriched with the relevant **OWASP Mobile Application Security Verification Standard (MASVS)** ID (e.g., `MASVS-STORAGE-1`), making your reports audit-ready instantly.
+- **🤖 Multi-Provider Support:** Run locally with **Ollama** (free & private) or scale up with **Gemini**, **Groq**, **OpenAI**, **Anthropic**, and **OpenRouter**.
+- **📊 Structured Security Reports:** Get detailed JSON output containing severity, confidence scores, evidence snippets, and even an "Attack Surface Map" of the application.
+- **💥 Auto-Exploit Generation:** Automatically generates actionable **Proof-of-Concept (PoC)** scripts (Bash, HTML, Python, Js) for confirmed vulnerabilities, proving the impact instantly. [Read the Docs](EXPLOIT_GENERATOR.md)
+- **🛡️ Smart Scope Protection:** The "Immune System" of the scanner. Automatically filters out library code (e.g., `androidx`, `google`, `r0.java`) using a combination of **Package Whitelisting** (via Manifest) and **Library Blocklisting**. [Read the Docs](EXPLOIT_GENERATOR.md#1-smart-scope-filtering-the-immune-system)
+- **👑 Cross-Component Chaining:** The "Crown Jewel". Capability that enables the AI to "connect the dots" between different files. It uses a **Two-Pass Analysis** (Discovery -> Global Context -> Execution) to generate chained exploits (e.g., using a token found in File A to exploit File B). [Read the Docs](EXPLOIT_GENERATOR.md#2-cross-component-chaining-the-crown-jewel)
+- **📦 XAPK Support:** Direct support for `.xapk` files. The engine automatically handles extraction and selects the main APK for seamless analysis.
 
 ## Scan Workflow
 
@@ -231,12 +231,12 @@ Droid LLM Hunter uses a multi-stage process to analyze an APK:
 
 Droid LLM Hunter supports the following LLM providers:
 
-*   **Ollama:** For running local LLMs. (Recommended)
-*   **Gemini:** Google's family of generative AI models.
-*   **Groq:** A high-performance inference engine for LLMs.
-*   **OpenAI:** OpenAI's family of generative AI models.
-*   **Anthropic:** Claude's family of generative AI models.
-*   **OpenRouter:** Access to hundreds of models (Llama 3, Claude 3.5, etc.) via a single API.
+- **Ollama:** For running local LLMs. (Recommended)
+- **Gemini:** Google's family of generative AI models.
+- **Groq:** A high-performance inference engine for LLMs.
+- **OpenAI:** OpenAI's family of generative AI models.
+- **Anthropic:** Claude's family of generative AI models.
+- **OpenRouter:** Access to hundreds of models (Llama 3, Claude 3.5, etc.) via a single API.
 
 ## Available Rules
 
@@ -524,6 +524,26 @@ python dlh.py scan [APK file]
 | list-rules                         | List all available rules.                                     |
 +------------------------------------+---------------------------------------------------------------+
 ```
+
+## CI/CD Integration
+
+Droid LLM Hunter is designed for seamless integration into CI/CD pipelines (GitHub Actions, GitLab CI, etc.).
+
+### GitHub Actions (Recommended)
+
+We provide a **Gold Standard** workflow example that includes:
+
+- Auto-building your Android APK.
+- Running Droid LLM Hunter with specific rules.
+- Uploading the security report as an artifact.
+
+👉 **[View the Professional Workflow Example](workflow_examples/android-security-scan.yml)**
+
+#### Key Features in CI/CD:
+
+- **Dynamic Rules:** Enable/Disable rules directly from YAML (e.g., `rules: "sql_injection:true, webview_xss:false"`).
+- **Custom Config:** Load your own `settings.yaml` via `config-path`.
+- **Hybrid Fallback:** Automatically switches to Static Analysis if JADX fails in the container.
 
 ## Development Roadmap
 

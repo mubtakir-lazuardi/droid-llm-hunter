@@ -1,4 +1,4 @@
-name: Demo - Scan Vulnerable App (DIVA)
+name: Demo - Scan Vulnerable App (VulnerAppDLH)
 
 on:
   workflow_dispatch: # Manual trigger only (to save quota/resources)
@@ -12,16 +12,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download DIVA APK (Vulnerable Target)
+      - name: Download VulnerAppDLH (Vulnerable Target)
         run: |
           mkdir -p demo_target
-          wget -q https://github.com/payatu/diva-android/raw/master/app/src/main/res/raw/diva.apk -O demo_target/diva.apk
-          echo "Downloaded DIVA APK."
+          wget -q https://github.com/roomkangali/VulnerAppDLH/raw/main/VulnerAppDLH.apk -O demo_target/VulnerAppDLH.apk
+          echo "Downloaded VulnerAppDLH APK."
 
       - name: Run Droid-LLM-Hunter Scan
         uses: ./ # Runs the action from THIS repository (Current Source)
         with:
-          apk-path: demo_target/diva.apk
+          apk-path: demo_target/VulnerAppDLH.apk
           provider: "gemini"
           # NOTE: You must set this secret in YOUR repo secrets for this demo to work!
           api-key: ${{ secrets.GEMINI_KEY }}

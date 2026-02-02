@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Distribution / Packaging
+dist/
+build/
+*.egg-info/
+
+# Unit Test / Coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Application Specific
+output/
+*.apk
+*.log
+banner.txt
+
+# Mac/Linux
+.DS_Store
+.idea/
+.vscode/
+
+# Config (if containing real secrets)
+# config/settings.yaml 
+# (Note: commented out because we track the template, but user should be careful not to commit keys)
