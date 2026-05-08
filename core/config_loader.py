@@ -29,6 +29,7 @@ class AnalysisSettings(BaseModel):
     filter_mode: str = "llm_only" # static_only, llm_only, hybrid
     decompiler_mode: str = "apktool" # apktool, jadx, hybrid
     generate_exploit: bool = False
+    scan_libraries: bool = False # [New V1.1.7]
  # Default to True for backward compatibility
 
 

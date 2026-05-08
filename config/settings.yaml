@@ -4,6 +4,7 @@ analysis:
   filter_mode: static_only # static_only, llm_only, or hybrid
   generate_attack_surface_map: true # Generate attack surface map
   generate_exploit: false # Generate PoC scripts for vulnerabilities
+  scan_libraries: false # If true, includes 3rd party libraries in scan scope.
   use_cross_reference_context: true # Use cross reference context
 
 # Apktool Configuration

@@ -104,6 +104,7 @@ Features **Auto-Exploit Generation**, transforming from a passive scanner into a
 - **💥 Auto-Exploit Generation:** Automatically generates actionable **Proof-of-Concept (PoC)** scripts (Bash, HTML, Python, Js) for confirmed vulnerabilities, proving the impact instantly. [Read the Docs](EXPLOIT_GENERATOR.md)
 - **🛡️ Smart Scope Protection:** The "Immune System" of the scanner. Automatically filters out library code (e.g., `androidx`, `google`, `r0.java`) using a combination of **Package Whitelisting** (via Manifest) and **Library Blocklisting**. [Read the Docs](EXPLOIT_GENERATOR.md#1-smart-scope-filtering-the-immune-system)
 - **👑 Cross-Component Chaining:** The "Crown Jewel". Capability that enables the AI to "connect the dots" between different files. It uses a **Two-Pass Analysis** (Discovery -> Global Context -> Execution) to generate chained exploits (e.g., using a token found in File A to exploit File B). [Read the Docs](EXPLOIT_GENERATOR.md#2-cross-component-chaining-the-crown-jewel)
+- **🕵️‍♂️ Library Hunter Mode (v1.1.7):** A specialized "Supply Chain" scanner that targets malicious behavior in third-party SDKs (`--scan-libraries`). It bypasses the scope protection to find backdoors, droppers (`DexClassLoader`), and spyware behavior in libraries, using Strict Regex Filtering to save tokens.
 - **📦 XAPK Support:** Direct support for `.xapk` files. The engine automatically handles extraction and selects the main APK for seamless analysis.
 
 ## Scan Workflow
@@ -131,7 +132,7 @@ Droid LLM Hunter uses a multi-stage process to analyze an APK:
                        |
                        v
 +----------------------+--------------------------------+
-|  PHASE 2: SMART SCOPE PROTECTION (The Immune System)  |  <-- [v1.1.3]
+|  PHASE 2: SMART SCOPE PROTECTION (The Immune System)  |  
 |                                                       |
 |  [ All Smali/Java Files ]                             |
 |          |                                            |
@@ -152,7 +153,7 @@ Droid LLM Hunter uses a multi-stage process to analyze an APK:
 |    [ Loop: Analyze Relevant Files ]                   |
 |                 |                                     |
 |                 v                                     |
-|    [ REGEX FILTER (Zero Cost) ]                       |  <-- [NEW v1.1.5]
+|    [ REGEX FILTER (Zero Cost) ]                       |  
 |    (Match 'detection_pattern'?)                       |
 |       NO |             | YES                          |
 |          v             v                              |
@@ -169,7 +170,7 @@ Droid LLM Hunter uses a multi-stage process to analyze an APK:
                        |
                        v
 +----------------------+--------------------------------+
-|  PHASE 4: INTELLIGENT CHAINING (Pass 2)               |  <-- [v1.1.3]
+|  PHASE 4: INTELLIGENT CHAINING (Pass 2)               |  
 |                                                       |
 |      [ Build Global Context ]                         |
 |   (Summarize all findings from Phase 3)               |
@@ -550,7 +551,6 @@ We provide a **Gold Standard** workflow example that includes:
 This document outlines the future development plans for the Droid-LLM-Hunter.
 
 - **AI-Powered Dynamic Analysis (`v2.0`):** Integration with **Frida & ADB** to verify static findings by running the app and simulating attacks (e.g., Reflection/IPC tracing, Intent Fuzzing). This directly addresses the limitations of static analysis regarding
-- **CI/CD Integration :** GitHub/GitLab templates for automated security scanning in DevOps pipeline.
   **Dynamic Dispatch** and **JNI**.
 - **Taint Analysis Engine:** Implementation of a lightweight Trace Engine (or FlowDroid integration) to map **Source-to-Sink** data paths, verifying if inputs are properly sanitized before reaching sensitive functions.
 - **De-obfuscation Support:** Support for mapping files (Proguard) and AI-based variable renaming to handle **Obfuscated Applications** and improve Call Graph accuracy.
