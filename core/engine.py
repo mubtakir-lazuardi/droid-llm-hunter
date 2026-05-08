@@ -25,7 +25,7 @@ class Engine:
         self.masvs_mapping = self._load_masvs_mapping()
         
         self.apk_name = "target_app" # Default fallback
-        self.vulnerability_findings = [] # [V1.1.3] Store findings for chained exploitation
+        self.vulnerability_findings = []  
         
         # Load Call Graph Builder if enabled
 
@@ -148,10 +148,20 @@ class Engine:
             if package_path in normalized_path:
                 return True
         
-        # 2. Check Blocklist
-        for blocked in blocklist:
-            if blocked in normalized_path:
-                return False
+        # [V1.1.7 Library Hunter]
+        if self.settings.analysis.scan_libraries:
+            # If Library Hunter is active, we WANT to see files in the blocklist.
+            # We specifically look FOR them.
+            # However, we still might want to filter out 'standard java/kotlin' runtime stuff if it's too noisy,
+            # but for now, let's just bypass the blocklist check if this mode is on.
+            pass 
+        else:
+            # Standard Mode: Block libraries
+            for blocked in blocklist:
+                if blocked in normalized_path:
+                    # Double Check: Is it actually the app's package?
+                    # Sometimes apps use package names that look like libraries? (Rare)
+                    return False
             
         # If no package name extracted and not blocked, allow it.
         return True
@@ -239,20 +249,33 @@ class Engine:
                 log.warning("PoC generation returned empty.")
                 return
 
-            # Determine extension
+            # [FIX] Strip markdown code fences that LLMs often wrap output with.
+            # e.g. ```bash\n...\n``` or ```python\n...\n```
+            # This ensures the saved file is directly executable without manual editing.
+            import re as _re
+            # Strategy 1: Extract content inside a fenced block if present
+            _fence_match = _re.search(r'^```[a-zA-Z]*\s*\n(.*?)\n```\s*$', poc_content.strip(), _re.DOTALL)
+            if _fence_match:
+                poc_content = _fence_match.group(1).strip()
+                log.debug("Stripped markdown code fence from PoC content.")
+            else:
+                # Strategy 2: Strip leading/trailing fence markers if partial
+                poc_content = _re.sub(r'^```[a-zA-Z]*\s*\n?', '', poc_content.strip())
+                poc_content = _re.sub(r'\n?```\s*$', '', poc_content.strip())
+                poc_content = poc_content.strip()
+
+            # Determine extension based on cleaned content
             ext = ".txt"
             if "Java.perform" in poc_content or "Java.use" in poc_content or "console.log" in poc_content:
                 ext = ".js"
+            elif "#!/usr/bin/env python" in poc_content or ("import " in poc_content and "def " in poc_content):
+                ext = ".py"
             elif "import " in poc_content or "def " in poc_content:
                 ext = ".py" 
-            elif "<html" in poc_content.lower() or "<script" in poc_content.lower():
+            elif "<html" in poc_content.lower() or "<script" in poc_content.lower() or "<!doctype" in poc_content.lower():
                 ext = ".html"
-            elif "#!/bin/bash" in poc_content or "adb shell" in poc_content:
+            elif "#!/bin/bash" in poc_content or "#!/bin/sh" in poc_content or "adb shell" in poc_content:
                 ext = ".sh"
-            
-            # Create exploits directory: output/[apk_name]_exploits/
-            # Use the stored apk_name (without extension ideally, or keep it?)
-            # User wants: "dvba.apk" -> "dvba_exploits" (or similar)
             
             # Use the pre-calculated exploit directory from 'run' if available, otherwise fallback
             if hasattr(self, 'final_exploit_dir') and self.final_exploit_dir:
@@ -271,6 +294,13 @@ class Engine:
             
             with open(save_path, "w") as f:
                 f.write(poc_content)
+            
+            # [FIX] Auto chmod +x for shell scripts so they are immediately runnable
+            if ext == ".sh":
+                import stat as _stat
+                current_mode = os.stat(save_path).st_mode
+                os.chmod(save_path, current_mode | _stat.S_IXUSR | _stat.S_IXGRP | _stat.S_IXOTH)
+                log.debug(f"chmod +x applied to {filename}")
                 
             log.success(f"PoC saved to {save_path}")
 
@@ -389,6 +419,79 @@ class Engine:
         # Combine snippets for the prompt
         full_code_context = code_snippet + external_context
 
+        # [V1.1.7 Library Hunter - Exclusive Mode]
+        # Logic: If this is a 3rd party library file, we run ONLY the specialized audit prompt.
+        # This saves tokens by not running the 20+ standard rules on generic library code.
+        
+        is_library_file = False
+        library_prefixes = [
+            "android/", "androidx/", "com/google/", "kotlin/", 
+            "okhttp3/", "retrofit2/", "io/reactivex/", "dagger/",
+            "b/b/p/", "b/j/a/"
+        ]
+        normalized_path = file_path.replace("\\", "/")
+        
+        for prefix in library_prefixes:
+            if prefix in normalized_path:
+                is_library_file = True
+                break
+        
+        if self.settings.analysis.scan_libraries and is_library_file:
+             log.info(f"Library Scan Triggered for: {os.path.basename(file_path)}")
+             prompt_path = "config/prompts/vuln_rules/library_vulnerability.yaml"
+             if os.path.exists(prompt_path):
+                 with open(prompt_path, "r") as f:
+                     prompt_data = yaml.safe_load(f)
+                 
+                 # [V1.1.7 Optimization] Hybrid Filter
+                 # Check regex pattern before calling LLM
+                 if self.settings.analysis.filter_mode != "llm_only":
+                     pattern = prompt_data.get("detection_pattern")
+                     if pattern:
+                         import re
+                         if not re.search(pattern, full_code_context, re.IGNORECASE | re.DOTALL):
+                             log.debug(f"Skipping library file {os.path.basename(file_path)}: No suspicious pattern found.")
+                             return results
+
+                 # Prepare Context
+                 system_prompt = self._load_system_prompt()
+                 
+                 context = {
+                    "system_prompt": system_prompt,
+                    "vuln_prompt": prompt_data["prompt"],
+                    "file_path": file_path
+                 }
+                 
+                 # Run Analysis
+                 try:
+                     raw_result = self.llm_client.analyze_code(full_code_context, context)
+                     parsed_result = self._parse_llm_response(raw_result)
+                     status = self.get_status(parsed_result)
+                 
+                     if status == "Vulnerable":
+                         parsed_result = self._enrich_result("library_vulnerability", parsed_result)
+                         if self.settings.analysis.generate_exploit:
+                              self.vulnerability_findings.append({
+                                  "file_path": file_path,
+                                  "code_snippet": full_code_context,
+                                  "vuln_description": parsed_result.get("description", ""),
+                                  "rule_name": "library_vulnerability"
+                              })
+
+                         results.append({
+                            "file": file_path,
+                            "vulnerability": "Library Hunter",
+                            "status": status,
+                            "result": parsed_result
+                         })
+                 except Exception as e:
+                     log.error(f"Library Scan failed for {file_path}: {e}")
+             
+             # [CRITICAL OPTIMIZATION] Early Return!
+             # We assume standard logic rules (like 'Intent Spoofing' in App Logic) are less relevant 
+             # for granular library internals, or are covered by the general 'Library Audit' prompt.
+             return results
+
         for rule_name, enabled in self.settings.rules.dict().items():
             if enabled and rule_name not in ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack"]:
                 if rules_to_run and rule_name not in rules_to_run:
@@ -438,7 +541,6 @@ class Engine:
                 if status == "Vulnerable":
                     parsed_result = self._enrich_result(rule_name, parsed_result)
                     
-                    # [V1.1.3] DEFERRED GENERATION
                     # Instead of generating PoC immediately, we store the finding.
                     if self.settings.analysis.generate_exploit:
                          self.vulnerability_findings.append({
@@ -484,7 +586,6 @@ class Engine:
                 if status == "Vulnerable":
                     parsed_result = self._enrich_result(rule_name, parsed_result)
                     
-                    # [V1.1.3] DEFERRED GENERATION
                     if self.settings.analysis.generate_exploit:
                          self.vulnerability_findings.append({
                              "file_path": manifest_path,
@@ -802,7 +903,7 @@ class Engine:
 
             # --- DYNAMIC KEYWORD & REGEX GATHERING ---
             extra_keywords = []
-            extra_regex = [] 
+            extra_regex = [] # [V1.2] Regex Support
             for rule_name, enabled in self.settings.rules.dict().items():
                 if enabled and rule_name not in ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack", "strandhogg"]:
                      try:
@@ -812,6 +913,7 @@ class Engine:
                             if "keywords" in rule_data and rule_data["keywords"]:
                                 extra_keywords.extend(rule_data["keywords"])
                             
+                            # [V1.2] Support for 'detection_pattern' (regex) and 'static_analysis' block
                             if "detection_pattern" in rule_data and rule_data["detection_pattern"]:
                                 extra_regex.append(rule_data["detection_pattern"])
                             elif "static_analysis" in rule_data:
@@ -852,33 +954,60 @@ class Engine:
             potential_targets = []
             
             # A. STATIC FILTER PHASE
+            # A. STATIC FILTER PHASE
             if filter_mode in ["static_only", "hybrid"]:
                 use_strict = (filter_mode == "hybrid")
-                if decomp_mode == "apktool":
-                    cf = CodeFilter(smali_dir, mode="smali", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
-                    potential_targets = cf.find_high_value_targets()
+                
+                # [V1.1.7 Optimization] Library Hunter Strict Mode
+                # If Library Scan is requested, we override standards to be VERY STRICT.
+                # We do NOT want generic 'WebView' or 'File' keywords matching 100 library files.
+                # We ONLY want 'readObject', 'DexClassLoader', etc.
+                if self.settings.analysis.scan_libraries:
+                    log.info("Library Hunter Mode: Enforcing STRICT regex targeting to save tokens.")
                     
-                elif decomp_mode == "jadx":
-                    if os.path.exists(java_dir):
-                        cf = CodeFilter(java_dir, mode="java", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
+                    # 1. Load ONLY the library regex
+                    strict_lib_regex = []
+                    lib_prompt_path = "config/prompts/vuln_rules/library_vulnerability.yaml"
+                    if os.path.exists(lib_prompt_path):
+                         with open(lib_prompt_path, "r") as f:
+                             d = yaml.safe_load(f)
+                             if "detection_pattern" in d:
+                                 strict_lib_regex.append(d["detection_pattern"])
+                    
+                    # 2. Run CodeFilter in STRICT MODE (No default keywords)
+                    # Support JADX or HYBRID (if Java sources exist)
+                    if decomp_mode in ["jadx", "hybrid"] and os.path.exists(java_dir):
+                        cf = CodeFilter(java_dir, mode="java", additional_keywords=[], additional_regex=strict_lib_regex, strict_mode=True)
                         potential_targets = cf.find_high_value_targets()
+                    # Fallback to Smali (Apktool or missing Java sources)
                     else:
-                        log.error("JADX sources not found. Falling back to Smali.")
+                        cf = CodeFilter(smali_dir, mode="smali", additional_keywords=[], additional_regex=strict_lib_regex, strict_mode=True)
+                        potential_targets = cf.find_high_value_targets()
+                     
+                else:
+                    # Standard Mode (Broad)
+                    if decomp_mode == "apktool":
                         cf = CodeFilter(smali_dir, mode="smali", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
                         potential_targets = cf.find_high_value_targets()
+                        
+                    elif decomp_mode == "jadx":
+                        if os.path.exists(java_dir):
+                            cf = CodeFilter(java_dir, mode="java", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
+                            potential_targets = cf.find_high_value_targets()
+                        else:
+                            log.error("JADX sources not found. Falling back to Smali.")
+                            cf = CodeFilter(smali_dir, mode="smali", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
+                            potential_targets = cf.find_high_value_targets()
 
-                elif decomp_mode == "hybrid":
-                    # HYBRID DECOMPILER + HYBRID FILTER
-                    # Ideally we want to find Java targets.
-                    if os.path.exists(java_dir):
-                        cf = CodeFilter(java_dir, mode="java", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
-                        java_targets = cf.find_high_value_targets()
-                        potential_targets = java_targets
-                        # Note: We rely on Java finding them. If obfuscation hides keywords in Java 
-                        # but not Smali? That's rare. Usually matches.
-                    else:
-                        cf = CodeFilter(smali_dir, mode="smali", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
-                        potential_targets = cf.find_high_value_targets()
+                    elif decomp_mode == "hybrid":
+                        # HYBRID DECOMPILER + HYBRID FILTER
+                        if os.path.exists(java_dir):
+                            cf = CodeFilter(java_dir, mode="java", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
+                            java_targets = cf.find_high_value_targets()
+                            potential_targets = java_targets
+                        else:
+                            cf = CodeFilter(smali_dir, mode="smali", additional_keywords=extra_keywords, additional_regex=extra_regex, strict_mode=use_strict)
+                            potential_targets = cf.find_high_value_targets()
 
             # B. LLM_ONLY PHASE (Get everything)
             else: 
