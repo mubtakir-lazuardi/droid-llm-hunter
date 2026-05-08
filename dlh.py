@@ -45,7 +45,8 @@ def main(ctx: typer.Context,
 @app.command()
 def scan(ctx: typer.Context, 
          apk_path: str = typer.Argument(..., help="Path to the APK file to analyze."),
-         generate_exploit: bool = typer.Option(False, "--generate-exploit", help="Generate PoC scripts for detected vulnerabilities.")):
+         generate_exploit: bool = typer.Option(False, "--generate-exploit", help="Generate PoC scripts for detected vulnerabilities."),
+         scan_libraries: bool = typer.Option(False, "--scan-libraries", help="Include 3rd party libraries in scan scope (e.g. androidx, google, okhttp).")):
     """
     Scan an APK file for vulnerabilities.
     """
@@ -59,6 +60,10 @@ def scan(ctx: typer.Context,
         
         if generate_exploit:
             settings.analysis.generate_exploit = True
+        
+        if scan_libraries:
+            settings.analysis.scan_libraries = True
+            log.info("Library Hunter Mode: ENABLED 📚")
             
         log.info("Configuration loaded successfully.")
         engine = Engine(settings)
