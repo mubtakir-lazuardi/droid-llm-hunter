@@ -1,5 +1,9 @@
 # Hybrid Architecture: Smart Engine Filtering + LLM Verification
 
+→ [Back to FEATURES](FEATURES.md)
+
+---
+
 **Smart Engine Filtering** is a major architectural optimization in Droid-LLM-Hunter designed to drastically reduce token usage while increasing scan speed and accuracy.
 
 ---
