@@ -124,7 +124,7 @@ Multi-stage pipeline: **Decompilation → Scope Filter → Risk Identification �
 
 ## 🛡️ Available Rules
 
-24 vulnerability rules covering SQL Injection, WebView XSS, Hardcoded Secrets, Intent Spoofing, Path Traversal, Insecure Deserialization, and more — all mapped to OWASP MASVS.
+25 vulnerability rules covering SQL Injection, WebView XSS, Hardcoded Secrets, Intent Spoofing, Path Traversal, Insecure Deserialization, and more — all mapped to OWASP MASVS.
 
 → **[View All Rules](document/RULES.md)**
 
