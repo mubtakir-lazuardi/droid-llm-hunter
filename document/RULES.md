@@ -6,7 +6,7 @@
 
 ## Overview
 
-Droid LLM Hunter ships with **24 vulnerability rules** covering the most critical Android security categories, all mapped to the **OWASP MASVS** framework.
+Droid LLM Hunter ships with **25 vulnerability rules** covering the most critical Android security categories, all mapped to the **OWASP MASVS** framework.
 
 Enable or disable rules in `config/settings.yaml`:
 
