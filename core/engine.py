@@ -333,14 +333,19 @@ class Engine:
 
         # Strategy 0: Clean Markdown Code Blocks
         # Many LLMs wrap JSON in ```json ... ```
-        # We find the first block enclosed in backticks if present
-        markdown_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+        # IMPORTANT: We capture ALL content between fences ([\s\S]*?), NOT just `{...}`.
+        # Reason: Using `\{.*?\}` (non-greedy) breaks on nested JSON objects — it stops
+        # at the first `}` found, producing truncated/invalid JSON.
+        # We let _extract_json_str() below handle the actual JSON boundary detection
+        # via brace-counting, which is far more robust.
+        markdown_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response, re.DOTALL)
         if markdown_match:
-             cleaned_response = markdown_match.group(1)
+            cleaned_response = markdown_match.group(1).strip()
         else:
-             # Fallback: regex replace if it's just tags without proper closure or mixed content
-             cleaned_response = re.sub(r'^```[a-zA-Z]*\s*', '', response.strip())
-             cleaned_response = re.sub(r'\s*```$', '', cleaned_response).strip()
+            # Fallback: strip leading ```json / ``` and trailing ``` line-by-line
+            cleaned_response = re.sub(r'^```[a-zA-Z]*\s*\n?', '', response.strip())
+            cleaned_response = re.sub(r'\n?\s*```\s*$', '', cleaned_response).strip()
+
 
         # Strategy 1: Extract JSON using Brace Counting (Most Robust)
         json_candidate = self._extract_json_str(cleaned_response)

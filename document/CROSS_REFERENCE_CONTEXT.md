@@ -1,5 +1,9 @@
 # Cross-Reference Context (Call Graph Analysis)
 
+→ [Back to FEATURES](FEATURES.md)
+
+---
+
 **Cross-Reference Context** is the "Context-Aware Engine" of Droid LLM Hunter. It distinguishes this tool from simple LLM wrappers by providing the AI with deep, structural awareness of the application's code flow.
 
 Most AI scanners analyze files in isolation ("Stateless"). Droid LLM Hunter analyzes files in **Context**.

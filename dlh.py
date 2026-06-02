@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 import typer
 from core.config_loader import load_settings
 from core import log
@@ -70,6 +71,7 @@ def scan(ctx: typer.Context,
         engine.run(apk_path, output, no_decompile, rules)
     except Exception as e:
         log.error(f"An error occurred during the scan: {e}")
+        raise typer.Exit(code=1)
 
 config_app = typer.Typer(help="Manage the configuration of Droid-LLM-Hunter.")
 app.add_typer(config_app, name="config")
@@ -111,22 +113,24 @@ def set_model(model: str = typer.Argument(None, help="The LLM model to use.")):
         settings = {"llm": {}}
 
     provider = settings.get("llm", {}).get("provider")
+
+    # Map provider name -> settings key
+    provider_model_key = {
+        "ollama": "model",
+        "gemini": "gemini_model",
+        "groq": "groq_model",
+        "openai": "openai_model",
+        "anthropic": "anthropic_model",
+        "openrouter": "openrouter_model",
+    }
     
     if model is None:
         # Show current model
         if not provider:
             print("LLM provider is not set.")
         else:
-            current_model = None
-            if provider == "ollama":
-                current_model = settings["llm"].get("model")
-            elif provider == "gemini":
-                current_model = settings["llm"].get("gemini_model")
-            elif provider == "groq":
-                current_model = settings["llm"].get("groq_model")
-            elif provider == "openai":
-                current_model = settings["llm"].get("openai_model")
-            
+            key = provider_model_key.get(provider)
+            current_model = settings["llm"].get(key) if key else None
             print(f"Current LLM model for {provider}: {current_model}")
         return
 
@@ -134,14 +138,12 @@ def set_model(model: str = typer.Argument(None, help="The LLM model to use.")):
         print("Please set the LLM provider first using 'config provider <provider>'")
         raise typer.Exit()
 
-    if provider == "ollama":
-        settings["llm"]["model"] = model
-    elif provider == "gemini":
-        settings["llm"]["gemini_model"] = model
-    elif provider == "groq":
-        settings["llm"]["groq_model"] = model
-    elif provider == "openai":
-        settings["llm"]["openai_model"] = model
+    key = provider_model_key.get(provider)
+    if not key:
+        print(f"Unknown provider '{provider}'. Supported: {', '.join(provider_model_key.keys())}")
+        raise typer.Exit()
+
+    settings["llm"][key] = model
         
     with open("config/settings.yaml", "w") as f:
         yaml.dump(settings, f)
@@ -345,11 +347,11 @@ def config_wizard():
     
     print("Welcome to the Droid LLM Hunter configuration wizard!")
     
-    provider = typer.prompt("Select LLM provider (ollama, gemini, groq, openai)")
+    provider = typer.prompt("Select LLM provider (ollama, gemini, groq, openai, anthropic, openrouter)")
     
     if provider == "ollama":
         model = typer.prompt("Enter Ollama model name")
-        ollama_url = typer.prompt("Enter Ollama URL")
+        ollama_url = typer.prompt("Enter Ollama URL", default="http://localhost:11434")
         settings = {
             "llm": {
                 "provider": provider,
@@ -358,7 +360,7 @@ def config_wizard():
             }
         }
     elif provider == "gemini":
-        gemini_model = typer.prompt("Enter Gemini model name")
+        gemini_model = typer.prompt("Enter Gemini model name", default="gemini-2.5-flash")
         api_key = typer.prompt("Enter Gemini API key")
         settings = {
             "llm": {
@@ -368,7 +370,7 @@ def config_wizard():
             }
         }
     elif provider == "groq":
-        groq_model = typer.prompt("Enter Groq model name")
+        groq_model = typer.prompt("Enter Groq model name", default="llama-3.1-8b-instant")
         groq_api_key = typer.prompt("Enter Groq API key")
         settings = {
             "llm": {
@@ -378,7 +380,7 @@ def config_wizard():
             }
         }
     elif provider == "openai":
-        openai_model = typer.prompt("Enter OpenAI model name")
+        openai_model = typer.prompt("Enter OpenAI model name", default="gpt-4-turbo")
         openai_api_key = typer.prompt("Enter OpenAI API key")
         settings = {
             "llm": {
@@ -387,17 +389,40 @@ def config_wizard():
                 "openai_api_key": openai_api_key
             }
         }
+    elif provider == "anthropic":
+        anthropic_model = typer.prompt("Enter Anthropic model name", default="claude-opus-4-6")
+        anthropic_api_key = typer.prompt("Enter Anthropic API key")
+        settings = {
+            "llm": {
+                "provider": provider,
+                "anthropic_model": anthropic_model,
+                "anthropic_api_key": anthropic_api_key
+            }
+        }
+    elif provider == "openrouter":
+        openrouter_model = typer.prompt("Enter OpenRouter model name", default="google/gemini-2.5-flash")
+        openrouter_api_key = typer.prompt("Enter OpenRouter API key")
+        settings = {
+            "llm": {
+                "provider": provider,
+                "openrouter_model": openrouter_model,
+                "openrouter_api_key": openrouter_api_key
+            }
+        }
     else:
-        print("Invalid provider selected.")
+        print(f"Invalid provider '{provider}'. Choose from: ollama, gemini, groq, openai, anthropic, openrouter")
         raise typer.Exit()
 
     try:
         with open("config/settings.yaml", "r") as f:
-            existing_settings = yaml.safe_load(f)
+            existing_settings = yaml.safe_load(f) or {}
     except FileNotFoundError:
         existing_settings = {}
 
-    existing_settings.update(settings)
+    # Deep merge: only update 'llm' key, preserve other settings
+    if "llm" not in existing_settings:
+        existing_settings["llm"] = {}
+    existing_settings["llm"].update(settings["llm"])
 
     with open("config/settings.yaml", "w") as f:
         yaml.dump(existing_settings, f)
@@ -433,12 +458,26 @@ def create_profile(name: str):
         
     print(f"Creating new profile: {name}")
     
-    # Run the wizard to create the new profile
+    import shutil
+
+    # Backup existing settings.yaml so we can restore it after wizard
+    backup_path = "config/settings.yaml.bak"
+    has_backup = False
+    if os.path.exists("config/settings.yaml"):
+        shutil.copy("config/settings.yaml", backup_path)
+        has_backup = True
+
+    # Run the wizard — it writes to settings.yaml
     config_wizard()
     
-    # move the settings to the profile file
-    os.rename("config/settings.yaml", profile_path)
-    
+    # Copy wizard output to the new profile file
+    shutil.copy("config/settings.yaml", profile_path)
+
+    # Restore the original settings.yaml from backup
+    if has_backup:
+        shutil.copy(backup_path, "config/settings.yaml")
+        os.remove(backup_path)
+
     print(f"Profile '{name}' created successfully.")
 
 @profile_app.command("list")
@@ -499,10 +538,12 @@ def delete_profile(name: str):
     print(f"Profile '{name}' deleted successfully.")
 
 
+# NOTE: list-rules is exposed via --list-rules flag on the root command (see list_rules_callback).
+# A subcommand alias is kept below for discoverability and backward compatibility.
 @app.command("list-rules")
-def list_rules():
+def list_rules_cmd():
     """
-    List all available rules.
+    List all available rules. (Alias: dlh --list-rules)
     """
     from core.config_loader import RulesSettings
     print("Available rules:")
