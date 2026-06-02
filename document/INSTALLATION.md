@@ -58,8 +58,7 @@ Open `config/settings.yaml` and set your LLM provider and API key:
 llm:
   provider: "gemini"
   gemini_model: "gemini-2.5-flash"
-  gemini_api_key: "YOUR_API_KEY_HERE"
-```
+  api_key: "YOUR_API_KEY_HERE"
 
 Or use the interactive wizard:
 
