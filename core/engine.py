@@ -340,11 +340,11 @@ class Engine:
         # via brace-counting, which is far more robust.
         markdown_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response, re.DOTALL)
         if markdown_match:
-             cleaned_response = markdown_match.group(1).strip()
+            cleaned_response = markdown_match.group(1).strip()
         else:
-             # Fallback: strip leading ```json / ``` and trailing ``` line-by-line
-             cleaned_response = re.sub(r'^```[a-zA-Z]*\s*\n?', '', response.strip())
-             cleaned_response = re.sub(r'\n?\s*```\s*$', '', cleaned_response).strip()
+            # Fallback: strip leading ```json / ``` and trailing ``` line-by-line
+            cleaned_response = re.sub(r'^```[a-zA-Z]*\s*\n?', '', response.strip())
+            cleaned_response = re.sub(r'\n?\s*```\s*$', '', cleaned_response).strip()
 
 
         # Strategy 1: Extract JSON using Brace Counting (Most Robust)
