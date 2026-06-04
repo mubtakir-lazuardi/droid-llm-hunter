@@ -196,4 +196,4 @@ Next major version (v2.0) targets AI-Powered Dynamic Analysis with Frida & ADB i
 
 ---
 
-*Droid LLM Hunter drastically reduces noise using Context Awareness and Smart Filtering, LLMs (Artificial Intelligence) are probabilistic and can still make mistakes or "hallucinate". Treat the results as leads that require manual verification. The tool is designed to augment human intelligence, not replace it. Always verify findings manually!*
+*While Droid LLM Hunter uses Context Awareness and Smart Filtering to minimize noise, LLMs are inherently probabilistic and may occasionally hallucinate or misidentify vulnerabilities. Treat all results as leads requiring manual verification. This tool is built to augment human analysis not replace it.*
