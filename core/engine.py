@@ -718,7 +718,7 @@ class Engine:
         risky_files = []
         identify_risk_prompt = self._load_identify_risk_prompt()
 
-        for file_path, summary in track(list(summaries.items()), description="Identifying risky files...", console=console):
+        for file_path, summary in track(summaries.items(), total=len(summaries), description="Identifying risky files...", console=console):
             context = {
                 "system_prompt": "",
                 "vuln_prompt": identify_risk_prompt,
