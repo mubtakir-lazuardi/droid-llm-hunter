@@ -16,6 +16,8 @@ import yaml
 import concurrent.futures
 import zipfile
 import shutil
+from rich.progress import track
+from core.logger import console
 
 class Engine:
     def __init__(self, settings: Settings):
@@ -340,11 +342,11 @@ class Engine:
         # via brace-counting, which is far more robust.
         markdown_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response, re.DOTALL)
         if markdown_match:
-            cleaned_response = markdown_match.group(1).strip()
+             cleaned_response = markdown_match.group(1).strip()
         else:
-            # Fallback: strip leading ```json / ``` and trailing ``` line-by-line
-            cleaned_response = re.sub(r'^```[a-zA-Z]*\s*\n?', '', response.strip())
-            cleaned_response = re.sub(r'\n?\s*```\s*$', '', cleaned_response).strip()
+             # Fallback: strip leading ```json / ``` and trailing ``` line-by-line
+             cleaned_response = re.sub(r'^```[a-zA-Z]*\s*\n?', '', response.strip())
+             cleaned_response = re.sub(r'\n?\s*```\s*$', '', cleaned_response).strip()
 
 
         # Strategy 1: Extract JSON using Brace Counting (Most Robust)
@@ -686,10 +688,10 @@ class Engine:
                     if file.endswith(".smali"):
                         files_to_process.append(os.path.join(root, file))
 
-        for file_path in files_to_process:
+        for file_path in track(files_to_process, description="Summarizing code...", console=console):
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
-            
+
             # Simple chunking by class
             chunks = content.split(".class ")
             for chunk in chunks:
@@ -716,7 +718,7 @@ class Engine:
         risky_files = []
         identify_risk_prompt = self._load_identify_risk_prompt()
 
-        for file_path, summary in summaries.items():
+        for file_path, summary in track(list(summaries.items()), description="Identifying risky files...", console=console):
             context = {
                 "system_prompt": "",
                 "vuln_prompt": identify_risk_prompt,
@@ -1124,7 +1126,7 @@ class Engine:
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                 future_to_file = {executor.submit(self.analyze_file, file_path, rules_to_run): file_path for file_path in target_files}
-                for future in concurrent.futures.as_completed(future_to_file):
+                for future in track(concurrent.futures.as_completed(future_to_file), total=len(future_to_file), description="Deep scanning files...", console=console):
                     file_path = future_to_file[future]
                     try:
                         results = future.result()
