@@ -11,6 +11,7 @@ def setup_logger(verbose: bool = False):
     logger.remove()
     logger.add(
         lambda msg: console.print(Text.from_ansi(msg.rstrip("\n"))),
+        enqueue=True,
         colorize=True,
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> - <level>{message}</level>",
         level=level,
