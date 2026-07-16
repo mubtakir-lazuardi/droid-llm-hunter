@@ -306,9 +306,13 @@ Handling obfuscated APKs — the biggest practical challenge in real-world Andro
 
 ## 📊 Expected Impact of v2.0
 
+> ⚠️ **Note:** The values below are **projected targets** for v2.0, not measured
+> benchmarks. They describe the intended direction of the dynamic-analysis
+> features and have not yet been validated against a real dataset.
+
 | Metric | v1.x (Static Only) | v2.0 (Static + Dynamic) |
 |--------|-------------------|------------------------|
-| False Positive Rate | ~20–30% | **< 5%** (Runtime Verified) |
+| False Positive Rate | Baseline (LLM-assessed) | Significantly reduced (runtime-verified) |
 | Finding Confidence | `High` (LLM-assessed) | `Confirmed` (Runtime-proven) |
 | Coverage | Visible source code patterns | Source + Runtime behavior + Taint paths |
 | Evidence Quality | Code snippet + description | Code + Logcat + Screenshot + Frida trace |

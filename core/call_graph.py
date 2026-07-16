@@ -11,7 +11,11 @@ class CallGraphBuilder:
         # Map: class_name -> file_path
         self.class_to_file = {}
         # Regex patterns
-        self.class_pattern = re.compile(r'^\.class\s+(?:public|private|protected|abstract|interface|static|final|synthetic)*\s*L([\w/$]+);')
+        # Modifiers are matched generically as space-separated tokens (e.g.
+        # "public final", "public abstract interface") — enumerating keywords
+        # without allowing spaces between them silently dropped every class with
+        # 2+ modifiers, which is the norm in Kotlin-compiled code.
+        self.class_pattern = re.compile(r'^\.class\s+(?:[\w-]+\s+)*L([\w/$]+);')
         self.invoke_pattern = re.compile(r'invoke-\w+\s+\{.*\},\s+L([\w/$]+);->(\w+)\(')
 
     def build(self):
@@ -58,27 +62,67 @@ class CallGraphBuilder:
         except Exception as e:
             log.warning(f"Error parsing smali file {file_path}: {e}")
 
-    def get_dependencies(self, file_path: str) -> list:
-        """Returns a list of file paths that the given file depends on (calls)."""
-        # 1. Find the class name for this file
-        target_class = None
-        for cls, path in self.class_to_file.items():
-            if path == file_path:
-                target_class = cls
+    def path_to_class(self, file_path: str) -> str | None:
+        """
+        Derive the normalized class name (e.g. 'com/example/Foo') from a decompiled
+        file path, working for BOTH Smali (apktool) and Java (JADX) outputs.
+
+        Apktool: <output_dir>/smali[/_classesN]/com/example/Foo.smali
+        JADX:    <output_dir>/sources/com/example/Foo.java
+
+        Anchored to self.decompiled_dir so a directory literally named 'smali' or
+        'sources' higher up in an absolute path can't be mistaken for the source root.
+        Returns None if the path is not under a recognized source root.
+        """
+        normalized = file_path.replace("\\", "/")
+
+        # Strip the decompiled_dir prefix so the first remaining segment is the root.
+        base = self.decompiled_dir.replace("\\", "/").rstrip("/")
+        if normalized.startswith(base + "/"):
+            normalized = normalized[len(base) + 1:]
+
+        # Strip the source extension.
+        for ext in (".smali", ".java"):
+            if normalized.endswith(ext):
+                normalized = normalized[:-len(ext)]
                 break
-        
+        else:
+            return None
+
+        parts = normalized.split("/")
+        if len(parts) < 2:
+            return None
+
+        root = parts[0]
+        if root == "sources" or root == "smali" or root.startswith("smali_classes"):
+            return "/".join(parts[1:])
+        return None
+
+    def get_dependencies(self, file_path: str) -> list:
+        """
+        Returns the normalized class names that the given file depends on (calls).
+
+        The call graph is always built from Smali (bytecode ground-truth), but the
+        file being analyzed may be a Java path (JADX/hybrid mode) — so we resolve the
+        target via path_to_class() instead of an exact path match. JADX bundles inner
+        classes into the parent .java file, so we also aggregate callees from the
+        target's inner classes (Foo, Foo$Bar, Foo$1, ...).
+        """
+        target_class = self.path_to_class(file_path)
         if not target_class:
             return []
 
-        # 2. Get callees from graph
-        callees = self.call_graph.get(target_class, set())
-        
-        # 3. Resolve callees to file paths
-        dependency_files = set()
-        for callee_class, _ in callees:
-            if callee_class in self.class_to_file:
-                # Avoid self-reference
-                if callee_class != target_class:
-                    dependency_files.add(self.class_to_file[callee_class])
-        
-        return list(dependency_files)
+        def _belongs_to_target(cls: str) -> bool:
+            # The target class itself or one of its inner classes.
+            return cls == target_class or cls.startswith(target_class + "$")
+
+        dependency_classes = set()
+        for cls, callees in self.call_graph.items():
+            if not _belongs_to_target(cls):
+                continue
+            for callee_class, _ in callees:
+                # Keep only resolvable, non-self dependencies.
+                if callee_class in self.class_to_file and not _belongs_to_target(callee_class):
+                    dependency_classes.add(callee_class)
+
+        return list(dependency_classes)
