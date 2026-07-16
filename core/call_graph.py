@@ -62,7 +62,7 @@ class CallGraphBuilder:
         except Exception as e:
             log.warning(f"Error parsing smali file {file_path}: {e}")
 
-    def path_to_class(self, file_path: str) -> str:
+    def path_to_class(self, file_path: str) -> str | None:
         """
         Derive the normalized class name (e.g. 'com/example/Foo') from a decompiled
         file path, working for BOTH Smali (apktool) and Java (JADX) outputs.

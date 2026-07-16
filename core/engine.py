@@ -435,8 +435,16 @@ class Engine:
                 relevant_summaries = []
                 for dep_class in dependency_classes:
                     short_name = dep_class.split("/")[-1]
-                    if short_name in code_snippet and dep_class in class_to_summary:
-                        relevant_summaries.append(f"- Class {short_name}: {class_to_summary[dep_class]}")
+                    summary = class_to_summary.get(dep_class)
+
+                    # JADX bundles inner classes into the parent .java; fall back to the outer class.
+                    if not summary and "$" in dep_class:
+                        summary = class_to_summary.get(dep_class.split("$", 1)[0])
+
+                    if summary:
+                        java_ref = short_name.replace("$", ".")
+                        if short_name in code_snippet or java_ref in code_snippet:
+                            relevant_summaries.append(f"- Class {java_ref}: {summary}")
 
                 if relevant_summaries:
                     external_context = "\n\n### EXTERNAL CONTEXT (Dependencies)\n"
