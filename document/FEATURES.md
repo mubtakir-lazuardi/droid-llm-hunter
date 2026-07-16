@@ -10,7 +10,7 @@
 
 - **⭐ Staged Prompt Architecture:** Uses a specialized pipeline of prompts (Summarization → Filtering → Deep Scan) to ensure consistent reasoning and reduce hallucination. [Read the Docs](PROMPT-EXPLANATION.md)
 
-- **📚 RAG with OWASP MASVS:** Every finding is automatically enriched with the relevant **OWASP Mobile Application Security Verification Standard (MASVS)** ID (e.g., `MASVS-STORAGE-1`), making your reports audit-ready instantly.
+- **📚 RAG with OWASP MASVS:** Findings are automatically enriched with the relevant **OWASP Mobile Application Security Verification Standard (MASVS)** ID (e.g., `MASVS-STORAGE-1`) for rules that have a MASVS mapping defined, making your reports audit-ready instantly.
 
 ---
 

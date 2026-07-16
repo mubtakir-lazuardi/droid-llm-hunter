@@ -43,7 +43,7 @@ Droid LLM Hunter uses a multi-stage process to analyze an APK:
 |     2. Blocklist: Drop known libs (androidx, r0...)   |
 |          |                                            |
 |          v                                            |
-|  [ Relevant Files Only ] (Noise Reduced by ~70%)      |
+|  [ Relevant Files Only ] (Libraries Discarded)        |
 +----------------------+--------------------------------+
                        |
                        v

@@ -310,16 +310,39 @@ class Engine:
             log.error(f"Failed to generate PoC: {e}")
 
     def _extract_json_str(self, text: str) -> str:
-        """Extracts the first valid JSON object string by counting braces."""
+        """
+        Extracts the first balanced JSON object by counting braces, while ignoring
+        any braces that appear INSIDE string values.
+
+        String-awareness matters because the `evidence` field routinely contains a
+        code snippet with its own `{`/`}` and even nested markdown fences (```java
+        ... ```). A naive counter miscounts those braces, and stripping fences with a
+        non-greedy regex truncates the JSON at the first inner ``` — both silently
+        drop otherwise-valid findings. Respecting string boundaries (and `\\` escapes)
+        makes brace-counting robust to arbitrary content inside string values.
+        """
         text = text.strip()
         start_idx = text.find('{')
         if start_idx == -1:
             return ""
-        
+
         balance = 0
+        in_string = False
+        escaped = False
         for i in range(start_idx, len(text)):
             char = text[i]
-            if char == '{':
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == '\\':
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+
+            if char == '"':
+                in_string = True
+            elif char == '{':
                 balance += 1
             elif char == '}':
                 balance -= 1
@@ -333,32 +356,24 @@ class Engine:
         import re
         import ast
 
-        # Strategy 0: Clean Markdown Code Blocks
-        # Many LLMs wrap JSON in ```json ... ```
-        # IMPORTANT: We capture ALL content between fences ([\s\S]*?), NOT just `{...}`.
-        # Reason: Using `\{.*?\}` (non-greedy) breaks on nested JSON objects — it stops
-        # at the first `}` found, producing truncated/invalid JSON.
-        # We let _extract_json_str() below handle the actual JSON boundary detection
-        # via brace-counting, which is far more robust.
-        markdown_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response, re.DOTALL)
-        if markdown_match:
-             cleaned_response = markdown_match.group(1).strip()
-        else:
-             # Fallback: strip leading ```json / ``` and trailing ``` line-by-line
-             cleaned_response = re.sub(r'^```[a-zA-Z]*\s*\n?', '', response.strip())
-             cleaned_response = re.sub(r'\n?\s*```\s*$', '', cleaned_response).strip()
+        # Strategy 0: String-aware brace counting on the RAW response.
+        # find('{') skips any leading ```json fence automatically, and the counter
+        # ignores braces / nested ``` fences that live inside string values (e.g. a
+        # code snippet in the "evidence" field). Running this FIRST — before any
+        # fence stripping — avoids the classic failure where a non-greedy fence regex
+        # truncates the JSON at the first ``` found inside a string value.
+        json_candidate = self._extract_json_str(response)
 
-
-        # Strategy 1: Extract JSON using Brace Counting (Most Robust)
-        json_candidate = self._extract_json_str(cleaned_response)
-        
+        # Strategy 1: Fallback — strip surrounding markdown fences, then retry.
+        # Covers responses where the object isn't cleanly balanced in the raw text.
+        cleaned_response = re.sub(r'^```[a-zA-Z]*\s*\n?', '', response.strip())
+        cleaned_response = re.sub(r'\n?\s*```\s*$', '', cleaned_response).strip()
         if not json_candidate:
-            # Fallback for when brace counting fails (e.g. malformed)
+            json_candidate = self._extract_json_str(cleaned_response)
+        if not json_candidate:
+            # Last resort: greedy brace match (may over-capture, tried after the above)
             match = re.search(r'\{.*\}', cleaned_response, re.DOTALL)
-            if match:
-                json_candidate = match.group(0)
-            else:
-                json_candidate = cleaned_response
+            json_candidate = match.group(0) if match else cleaned_response
 
         # List of candidate strings to try parsing
         candidates = [json_candidate, cleaned_response, response]
@@ -403,25 +418,30 @@ class Engine:
         # Context Injection via Call Graph
         external_context = ""
         if self.call_graph_builder and self.settings.analysis.use_cross_reference_context:
-            dependencies = self.call_graph_builder.get_dependencies(file_path)
-            if dependencies:
-                external_context = "\n\n### EXTERNAL CONTEXT (Dependencies)\n"
-                external_context += "The following are summaries of classes called by this file. Use this to verify inputs/outputs and reduce false positives.\n"
-                
-                # Smart Filtering: Check if the dependency is actually referenced in the code
-                # Heuristic: The class name (without package) should likely appear in the smali code
+            dependency_classes = self.call_graph_builder.get_dependencies(file_path)
+            if dependency_classes:
+                # Map each summarized file to its class name, so a dependency's summary
+                # can be attached whether it was summarized as .java (JADX/hybrid) or
+                # .smali (apktool). This is what makes context injection work in hybrid
+                # mode, where analyzed files are .java but the call graph is Smali-based.
+                class_to_summary = {}
+                for summ_path, summ in self.summaries.items():
+                    cls = self.call_graph_builder.path_to_class(summ_path)
+                    if cls:
+                        class_to_summary[cls] = summ
+
+                # Smart Filtering: only inject a dependency's context when we actually
+                # have its summary AND its short class name is referenced in this file.
                 relevant_summaries = []
-                for dep_path in dependencies:
-                    dep_class_name = os.path.basename(dep_path).replace(".smali", "")
-                    # Simple check: is the class name mentioned?
-                    if dep_class_name in code_snippet:
-                        if dep_path in self.summaries:
-                            relevant_summaries.append(f"- Class {dep_class_name}: {self.summaries[dep_path]}")
-                
+                for dep_class in dependency_classes:
+                    short_name = dep_class.split("/")[-1]
+                    if short_name in code_snippet and dep_class in class_to_summary:
+                        relevant_summaries.append(f"- Class {short_name}: {class_to_summary[dep_class]}")
+
                 if relevant_summaries:
+                    external_context = "\n\n### EXTERNAL CONTEXT (Dependencies)\n"
+                    external_context += "The following are summaries of classes called by this file. Use this to verify inputs/outputs and reduce false positives.\n"
                     external_context += "\n".join(relevant_summaries)
-                else:
-                    external_context = "" # Reset if no relevant context found
         
         # Combine snippets for the prompt
         full_code_context = code_snippet + external_context
