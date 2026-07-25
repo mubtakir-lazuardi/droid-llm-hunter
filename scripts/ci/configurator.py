@@ -92,7 +92,7 @@ def apply_llm_settings(settings: Dict[str, Any]) -> None:
 
         # API Key Configuration Mapping
         api_key_map = {
-            "gemini": "api_key",
+            "gemini": "gemini_api_key",
             "groq": "groq_api_key",
             "openai": "openai_api_key",
             "anthropic": "anthropic_api_key",

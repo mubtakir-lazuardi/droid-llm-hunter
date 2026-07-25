@@ -1,0 +1,5 @@
+# Development / test dependencies (not needed to run the scanner).
+#   pip install -r requirements-dev.txt
+#   pytest            # runs the deterministic (no-LLM) test suite
+-r requirements.txt
+pytest==9.1.1

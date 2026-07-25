@@ -61,8 +61,13 @@ class JadxHandler:
                 log.success(f"JADX decompilation successful: {output_abspath}")
                 return True
             elif has_sources:
-                 log.warning(f"JADX finished with errors (exit code {result.returncode}), but source code was generated. Proceeding...")
+                 # A non-zero exit with sources present is JADX's normal partial-decompile
+                 # outcome: some classes fail on almost every real APK (obfuscation, unusual
+                 # bytecode), JADX skips them and still emits the rest. This is the success
+                 # path, not a warning — keep it calm and push details to DEBUG (-v).
+                 log.info(f"JADX decompilation complete (exit code {result.returncode}; some classes skipped — normal).")
                  log.debug(f"JADX STDOUT: {result.stdout}")
+                 log.debug(f"JADX STDERR: {result.stderr}")
                  return True
             else:
                  log.error(f"JADX failed with exit code {result.returncode} and no sources found.")

@@ -12,7 +12,7 @@
                        |
                        v
 +----------------------+--------------------------------+
-|  PHASE 2: SMART SCOPE PROTECTION (The Immune System)  |  <-- [v1.1.3]
+|  PHASE 2: SMART SCOPE PROTECTION (The Immune System)  |
 |                                                       |
 |  [ All Smali/Java Files ]                             |
 |          |                                            |
@@ -22,23 +22,25 @@
 |     2. Blocklist: Drop known libs (androidx, r0...)   |
 |          |                                            |
 |          v                                            |
-|  [ Relevant Files Only ] (Noise Reduced by ~70%)      |
+|  [ Relevant Files Only ] (Libraries Discarded)        |
 +----------------------+--------------------------------+
                        |
                        v
-+----------------------+--------------------------------+
 +----------------------+--------------------------------+
 |  PHASE 3: DISCOVERY & RISK ID (Hybrid Pass)           |
 |                                                       |
 |    [ Loop: Analyze Relevant Files ]                   |
 |                 |                                     |
 |                 v                                     |
-|    [ REGEX FILTER (Zero Cost) ]                       |  <-- [NEW v1.1.5]
+|    [ REGEX FILTER (Zero Cost) ]                       |
 |    (Match 'detection_pattern'?)                       |
 |       NO |             | YES                          |
 |          v             v                              |
-|       [ Skip ]      [ LLM VERIFICATION ]              |
-|                     (Context & Logic Check)           |
+|       [ Skip ]   [ CACHE CHECK ] --HIT--> [ Reuse ]   |
+|                        | MISS                         |
+|                        v                              |
+|                  [ LLM VERIFICATION ]                 |
+|                  (Context & Logic Check)              |
 |                                |                      |
 |                                v                      |
 |                     [ Validate Finding ]              |
@@ -50,7 +52,7 @@
                        |
                        v
 +----------------------+--------------------------------+
-|  PHASE 4: INTELLIGENT CHAINING (Pass 2)               |  <-- [v1.1.3]
+|  PHASE 4: INTELLIGENT CHAINING (Pass 2)               |
 |                                                       |
 |      [ Build Global Context ]                         |
 |   (Summarize all findings from Phase 3)               |

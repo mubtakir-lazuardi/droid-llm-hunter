@@ -1,11 +1,48 @@
 # pyrefly: ignore [missing-import]
 import typer
+from typer import rich_utils as _rich_utils
+from rich.panel import Panel as _Panel
+from rich.table import Table as _Table
 from core.config_loader import load_settings
 from core import log
 from core.engine import Engine
 from core.logger import setup_logger
 
-app = typer.Typer()
+app = typer.Typer(
+    add_completion=False,            # hide --install-completion / --show-completion
+    rich_markup_mode="rich",
+)
+
+# --- Boxed "Examples" panel on the top-level `dlh.py --help` -------------------
+# Typer's `epilog` only renders as loose text, so to get a bordered panel that
+# matches the Commands/Options boxes we render one ourselves by wrapping Typer's
+# own rich help renderer. Gated to the root help (ctx.parent is None) so it does
+# not appear on `scan --help` / `config --help`.
+_HELP_EXAMPLES = [
+    ("python dlh.py scan app.apk", "Basic scan"),
+    ("python dlh.py scan app.apk --generate-exploit", "Scan + PoC"),
+    ("python dlh.py scan app.apk --scan-libraries", "Library Hunter"),
+    ('python dlh.py -r "sql_injection,webview_xss" scan app.apk', "Specific rules"),
+    ("python dlh.py --list-rules", "List all rules"),
+]
+
+_orig_rich_format_help = _rich_utils.rich_format_help
+
+
+def _rich_format_help_with_examples(*, obj, ctx, markup_mode):
+    _orig_rich_format_help(obj=obj, ctx=ctx, markup_mode=markup_mode)
+    if ctx.parent is None:  # top-level help only
+        console = _rich_utils._get_rich_console()
+        table = _Table(box=None, show_header=False, pad_edge=False, expand=False)
+        table.add_column(style="cyan", no_wrap=True)
+        table.add_column(style="dim")
+        for cmd, desc in _HELP_EXAMPLES:
+            table.add_row(cmd, desc)
+        console.print(_Panel(table, title="Examples", title_align="left", border_style="cyan"))
+        console.print("  Docs: https://github.com/roomkangali/droid-llm-hunter", style="dim")
+
+
+_rich_utils.rich_format_help = _rich_format_help_with_examples
 
 def list_rules_callback(value: bool):
     if value:
@@ -16,12 +53,12 @@ def list_rules_callback(value: bool):
         raise typer.Exit()
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context, 
-         verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging."),
-         output: str = typer.Option(None, "--output", "-o", help="Output file for the scan results."),
-         no_decompile: bool = typer.Option(False, "--no-decompile", help="Skip the decompilation step."),
-         rules: str = typer.Option(None, "--rules", "-r", help="Comma-separated list of rules to run."),
-         profile: str = typer.Option(None, "--profile", "-p", help="Configuration profile to use."),
+def main(ctx: typer.Context,
+         verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging.", rich_help_panel="Scan Options"),
+         output: str = typer.Option(None, "--output", "-o", help="Output file for the scan results.", rich_help_panel="Scan Options"),
+         no_decompile: bool = typer.Option(False, "--no-decompile", help="Skip the decompilation step.", rich_help_panel="Scan Options"),
+         rules: str = typer.Option(None, "--rules", "-r", help="Comma-separated list of rules to run.", rich_help_panel="Scan Options"),
+         profile: str = typer.Option(None, "--profile", "-p", help="Configuration profile to use.", rich_help_panel="Scan Options"),
          list_rules: bool = typer.Option(False, "--list-rules", help="List all available rules and exit.", callback=list_rules_callback, is_eager=True)):
     """
     Droid-LLM-Hunter: A tool to scan for vulnerabilities in Android applications.
@@ -36,6 +73,7 @@ def main(ctx: typer.Context,
              log.warning("banner.txt not found.")
         except Exception as e:
              log.debug(f"Could not load banner: {e}")
+        print("Run 'python dlh.py --help' to get started.\n")
 
     setup_logger(verbose)
     ctx.meta["output"] = output
@@ -43,11 +81,12 @@ def main(ctx: typer.Context,
     ctx.meta["rules"] = rules
     ctx.meta["profile"] = profile
 
-@app.command()
-def scan(ctx: typer.Context, 
+@app.command(no_args_is_help=True)
+def scan(ctx: typer.Context,
          apk_path: str = typer.Argument(..., help="Path to the APK file to analyze."),
          generate_exploit: bool = typer.Option(False, "--generate-exploit", help="Generate PoC scripts for detected vulnerabilities."),
-         scan_libraries: bool = typer.Option(False, "--scan-libraries", help="Include 3rd party libraries in scan scope (e.g. androidx, google, okhttp).")):
+         scan_libraries: bool = typer.Option(False, "--scan-libraries", help="Include 3rd party libraries in scan scope (e.g. androidx, google, okhttp)."),
+         no_cache: bool = typer.Option(False, "--no-cache", help="Disable the LLM response cache (force fresh calls, no resume).")):
     """
     Scan an APK file for vulnerabilities.
     """
@@ -65,7 +104,11 @@ def scan(ctx: typer.Context,
         if scan_libraries:
             settings.analysis.scan_libraries = True
             log.info("Library Hunter Mode: ENABLED 📚")
-            
+
+        if no_cache:
+            settings.analysis.use_cache = False
+            log.info("Response cache: DISABLED (--no-cache)")
+
         log.info("Configuration loaded successfully.")
         engine = Engine(settings)
         engine.run(apk_path, output, no_decompile, rules)
@@ -73,7 +116,7 @@ def scan(ctx: typer.Context,
         log.error(f"An error occurred during the scan: {e}")
         raise typer.Exit(code=1)
 
-config_app = typer.Typer(help="Manage the configuration of Droid-LLM-Hunter.")
+config_app = typer.Typer(help="Manage the configuration of Droid-LLM-Hunter.", no_args_is_help=True)
 app.add_typer(config_app, name="config")
 
 @config_app.command("provider")
@@ -84,16 +127,16 @@ def set_provider(provider: str = typer.Argument(None, help="The LLM provider to 
     import yaml
     try:
         with open("config/settings.yaml", "r") as f:
-            settings = yaml.safe_load(f)
+            settings = yaml.safe_load(f) or {}
     except FileNotFoundError:
-        settings = {"llm": {}}
-    
+        settings = {}
+
     if provider is None:
         current_provider = settings.get("llm", {}).get("provider")
         print(f"Current LLM provider: {current_provider}")
         return
 
-    settings["llm"]["provider"] = provider
+    settings.setdefault("llm", {})["provider"] = provider
     
     with open("config/settings.yaml", "w") as f:
         yaml.dump(settings, f)
@@ -108,9 +151,9 @@ def set_model(model: str = typer.Argument(None, help="The LLM model to use.")):
     import yaml
     try:
         with open("config/settings.yaml", "r") as f:
-            settings = yaml.safe_load(f)
+            settings = yaml.safe_load(f) or {}
     except FileNotFoundError:
-        settings = {"llm": {}}
+        settings = {}
 
     provider = settings.get("llm", {}).get("provider")
 
@@ -143,11 +186,11 @@ def set_model(model: str = typer.Argument(None, help="The LLM model to use.")):
         print(f"Unknown provider '{provider}'. Supported: {', '.join(provider_model_key.keys())}")
         raise typer.Exit()
 
-    settings["llm"][key] = model
-        
+    settings.setdefault("llm", {})[key] = model
+
     with open("config/settings.yaml", "w") as f:
         yaml.dump(settings, f)
-        
+
     print(f"LLM model for {provider} set to: {model}")
 
 @config_app.command("rules")
@@ -361,12 +404,12 @@ def config_wizard():
         }
     elif provider == "gemini":
         gemini_model = typer.prompt("Enter Gemini model name", default="gemini-2.5-flash")
-        api_key = typer.prompt("Enter Gemini API key")
+        gemini_api_key = typer.prompt("Enter Gemini API key")
         settings = {
             "llm": {
                 "provider": provider,
                 "gemini_model": gemini_model,
-                "api_key": api_key
+                "gemini_api_key": gemini_api_key
             }
         }
     elif provider == "groq":

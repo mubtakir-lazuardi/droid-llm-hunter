@@ -27,7 +27,8 @@ class Engine:
         self.masvs_mapping = self._load_masvs_mapping()
         
         self.apk_name = "target_app" # Default fallback
-        self.vulnerability_findings = []  
+        self.vulnerability_findings = []
+        self.analysis_errors = []  # [FIX #2] Files/rules that failed LLM analysis (NOT clean)
         
         # Load Call Graph Builder if enabled
 
@@ -52,26 +53,128 @@ class Engine:
         return result_dict
 
     def _setup_llm_client(self):
-        if self.settings.llm.provider == "ollama":
-            return OllamaClient(model=self.settings.llm.model, url=self.settings.llm.ollama_url)
-        elif self.settings.llm.provider == "gemini":
-            return GeminiClient(model=self.settings.llm.gemini_model, api_key=self.settings.llm.api_key)
-        elif self.settings.llm.provider == "groq":
-            return GroqClient(model=self.settings.llm.groq_model, api_key=self.settings.llm.groq_api_key)
-        elif self.settings.llm.provider == "openai":
-            return OpenAIClient(model=self.settings.llm.openai_model, api_key=self.settings.llm.openai_api_key)
-        elif self.settings.llm.provider == "anthropic":
-            return AnthropicClient(model=self.settings.llm.anthropic_model, api_key=self.settings.llm.anthropic_api_key)
-        elif self.settings.llm.provider == "openrouter":
-            return OpenRouterClient(model=self.settings.llm.openrouter_model, api_key=self.settings.llm.openrouter_api_key)
+        provider = self.settings.llm.provider
+        max_tokens = self.settings.llm.max_tokens  # [#6] Configurable output limit
+
+        if provider == "ollama":
+            model = self.settings.llm.model
+            raw_client = OllamaClient(model=model, url=self.settings.llm.ollama_url, max_tokens=max_tokens)
+        elif provider == "gemini":
+            model = self.settings.llm.gemini_model
+            raw_client = GeminiClient(model=model, api_key=self.settings.llm.gemini_api_key, max_tokens=max_tokens)
+        elif provider == "groq":
+            model = self.settings.llm.groq_model
+            raw_client = GroqClient(model=model, api_key=self.settings.llm.groq_api_key, max_tokens=max_tokens)
+        elif provider == "openai":
+            model = self.settings.llm.openai_model
+            raw_client = OpenAIClient(model=model, api_key=self.settings.llm.openai_api_key, max_tokens=max_tokens)
+        elif provider == "anthropic":
+            model = self.settings.llm.anthropic_model
+            raw_client = AnthropicClient(model=model, api_key=self.settings.llm.anthropic_api_key, max_tokens=max_tokens)
+        elif provider == "openrouter":
+            model = self.settings.llm.openrouter_model
+            raw_client = OpenRouterClient(model=model, api_key=self.settings.llm.openrouter_api_key, max_tokens=max_tokens)
         else:
-            raise ValueError(f"Unsupported LLM provider: {self.settings.llm.provider}")
+            raise ValueError(f"Unsupported LLM provider: {provider}")
+
+        # [#4] Wrap in a content-addressed cache (resume + dedup). Key includes the model,
+        # so mixing providers/models never collides.
+        from core.llm_cache import CachedLLMClient
+        cache_dir = "output/.dlh_cache"
+        if self.settings.analysis.use_cache:
+            log.info("Response cache: ENABLED 💾")
+        return CachedLLMClient(raw_client, cache_dir, model=model, enabled=self.settings.analysis.use_cache)
 
     def get_status(self, result: dict) -> str:
         """Determines status from the structured JSON result."""
         if result.get("is_vulnerable"):
             return "Vulnerable"
         return "Not Vulnerable"
+
+    def _rule_should_run(self, rule_name: str, prompt_data: dict, content: str) -> bool:
+        """
+        [FIX #1] Per-rule regex gating for the deep-scan phase.
+
+        In non-'llm_only' modes, skip a rule's LLM call when the rule declares one or
+        more detection patterns and NONE of them match the file. Rules without any
+        pattern (pure-logic rules like universal_logic_flaw) always run. Bad patterns
+        fail open (run the LLM) so a broken regex never silently drops a rule.
+        """
+        if self.settings.analysis.filter_mode == "llm_only":
+            return True
+
+        import re
+        rule_patterns = []
+        if prompt_data.get("detection_pattern"):
+            rule_patterns.append(prompt_data["detection_pattern"])
+        static_block = prompt_data.get("static_analysis") or {}
+        if static_block.get("patterns"):
+            rule_patterns.extend(static_block["patterns"])
+
+        if not rule_patterns:
+            return True  # No pattern -> logic rule, always run.
+
+        try:
+            return any(re.search(p, content, re.IGNORECASE | re.DOTALL) for p in rule_patterns)
+        except re.error as e:
+            log.warning(f"Invalid detection pattern for rule '{rule_name}' ({e}); running LLM anyway.")
+            return True
+
+    def _is_failed_response(self, raw_result: str) -> bool:
+        """[FIX #2] True when the LLM client soft-failed (empty response after retries)."""
+        return not raw_result or not raw_result.strip()
+
+    def _truncate_for_llm(self, text: str) -> str:
+        """
+        [#5] Guard against oversized file content blowing the context window / cost.
+
+        Keeps the head (imports, class decl, early logic) and the tail (which holds any
+        appended external dependency context), dropping the middle with an explicit marker
+        so the LLM knows content was omitted. Controlled by analysis.max_input_chars (0 or
+        negative disables truncation).
+        """
+        limit = self.settings.analysis.max_input_chars
+        if not limit or limit <= 0 or len(text) <= limit:
+            return text
+
+        head_len = int(limit * 0.7)
+        tail_len = limit - head_len
+        omitted = len(text) - limit
+        log.debug(f"Truncating LLM input: {len(text)} -> {limit} chars ({omitted} omitted).")
+        return (
+            text[:head_len]
+            + f"\n\n... [TRUNCATED {omitted} chars to fit context limit] ...\n\n"
+            + text[-tail_len:]
+        )
+
+    def _build_error_result(self, file_path: str, rule_name: str, vuln_name: str, reason: str = "empty") -> dict:
+        """
+        [FIX #2 / B] Report entry for a rule/file that could NOT be analyzed (not clean).
+
+        reason:
+          "empty"       -> LLM returned nothing after retries (soft-fail).
+          "unparseable" -> LLM returned non-empty output that was not valid JSON
+                           (common with local models that answer in prose instead of JSON).
+        """
+        self.analysis_errors.append({"file": file_path, "rule": rule_name, "reason": reason})
+        if reason == "unparseable":
+            error_msg = ("LLM returned unparseable output (not valid JSON — likely prose, "
+                         "common with small local models). This file/rule was NOT verified — "
+                         "treat as unanalyzed, not clean.")
+        else:
+            error_msg = ("LLM analysis failed (empty response after retries). "
+                         "This file/rule was NOT verified — treat as unanalyzed, not clean.")
+        return {
+            "file": file_path,
+            "vulnerability": vuln_name,
+            "status": "Error",
+            "result": {
+                "is_vulnerable": False,
+                "status_detail": "UNANALYZED",
+                "error": error_msg,
+                "description": "Analysis could not be completed for this rule.",
+            },
+        }
 
     def _find_manifest_path(self, start_path: str) -> str:
         """Traverses up the directory tree to find AndroidManifest.xml."""
@@ -210,7 +313,6 @@ class Engine:
                 prompt_template = f.read()
             
             prompt = prompt_template.replace("{vulnerability_description}", vuln_description)
-            prompt = prompt.replace("{file_path}", file_path)
             prompt = prompt.replace("{file_path}", file_path)
             prompt = prompt.replace("{manifest_context}", manifest_context) # Inject Manifest
             prompt = prompt.replace("{detected_secrets}", detected_secrets_str) # Inject Secrets
@@ -399,6 +501,7 @@ class Engine:
 
         log.warning(f"Failed to parse LLM response as JSON. Raw: {response[:100]}...")
         return {
+                "_parse_failed": True,  # [B] Signals unparseable (non-empty) output to callers.
                 "is_vulnerable": False,
                 "severity": "Info",
                 "confidence": "Low",
@@ -453,6 +556,8 @@ class Engine:
         
         # Combine snippets for the prompt
         full_code_context = code_snippet + external_context
+        # [#5] Cap oversized content before it reaches the LLM.
+        full_code_context = self._truncate_for_llm(full_code_context)
 
         # [V1.1.7 Library Hunter - Exclusive Mode]
         # Logic: If this is a 3rd party library file, we run ONLY the specialized audit prompt.
@@ -494,15 +599,30 @@ class Engine:
                  context = {
                     "system_prompt": system_prompt,
                     "vuln_prompt": prompt_data["prompt"],
-                    "file_path": file_path
+                    "file_path": file_path,
+                    "expect_json": True  # [A] Rule analysis requires JSON output
                  }
-                 
+
                  # Run Analysis
                  try:
                      raw_result = self.llm_client.analyze_code(full_code_context, context)
+
+                     # [FIX #2] A failed LLM call must not read as a clean library.
+                     if self._is_failed_response(raw_result):
+                         log.warning(f"LLM library scan failed for {os.path.basename(file_path)}; marking as Error (not clean).")
+                         results.append(self._build_error_result(file_path, "library_vulnerability", "Library Hunter"))
+                         return results
+
                      parsed_result = self._parse_llm_response(raw_result)
+
+                     # [B] Non-empty but unparseable (e.g. prose from a local model) -> Error, not clean.
+                     if parsed_result.get("_parse_failed"):
+                         log.warning(f"Unparseable LLM output for library scan of {os.path.basename(file_path)}; marking as Error.")
+                         results.append(self._build_error_result(file_path, "library_vulnerability", "Library Hunter", reason="unparseable"))
+                         return results
+
                      status = self.get_status(parsed_result)
-                 
+
                      if status == "Vulnerable":
                          parsed_result = self._enrich_result("library_vulnerability", parsed_result)
                          if self.settings.analysis.generate_exploit:
@@ -527,15 +647,19 @@ class Engine:
              # for granular library internals, or are covered by the general 'Library Audit' prompt.
              return results
 
-        for rule_name, enabled in self.settings.rules.dict().items():
+        for rule_name, enabled in self.settings.rules.model_dump().items():
             if enabled and rule_name not in ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack"]:
                 if rules_to_run and rule_name not in rules_to_run:
                     continue
                 prompt_path = f"config/prompts/vuln_rules/{rule_name}.yaml"
                 with open(prompt_path, "r") as f:
                     prompt_data = yaml.safe_load(f)
-                
-                
+
+                # [FIX #1] Skip this rule's LLM call if its detection pattern doesn't match.
+                if not self._rule_should_run(rule_name, prompt_data, full_code_context):
+                    log.debug(f"Gated: rule '{rule_name}' skipped for {os.path.basename(file_path)} (no pattern match).")
+                    continue
+
                 # --- MASVS CONTEXT INJECTION (LITE RAG) ---
                 system_prompt = self._load_system_prompt()
                 
@@ -564,14 +688,29 @@ class Engine:
                 context = {
                     "system_prompt": system_prompt,
                     "vuln_prompt": vuln_prompt,
-                    "file_path": file_path
+                    "file_path": file_path,
+                    "expect_json": True  # [A] Rule analysis requires JSON output
                 }
-                
+
                 # Pass the ENRICHED context
                 raw_result = self.llm_client.analyze_code(full_code_context, context)
+
+                # [FIX #2] Distinguish a failed LLM call from a genuine "clean" verdict.
+                if self._is_failed_response(raw_result):
+                    log.warning(f"LLM analysis failed for rule '{rule_name}' on {os.path.basename(file_path)}; marking as Error (not clean).")
+                    results.append(self._build_error_result(file_path, rule_name, prompt_data["name"]))
+                    continue
+
                 parsed_result = self._parse_llm_response(raw_result)
+
+                # [B] Non-empty but unparseable (e.g. prose from a local model) -> Error, not clean.
+                if parsed_result.get("_parse_failed"):
+                    log.warning(f"Unparseable LLM output for rule '{rule_name}' on {os.path.basename(file_path)}; marking as Error.")
+                    results.append(self._build_error_result(file_path, rule_name, prompt_data["name"], reason="unparseable"))
+                    continue
+
                 status = self.get_status(parsed_result)
-                
+
                 # Enrich with MASVS
                 if status == "Vulnerable":
                     parsed_result = self._enrich_result(rule_name, parsed_result)
@@ -610,13 +749,28 @@ class Engine:
                 context = {
                     "system_prompt": self._load_system_prompt(),
                     "vuln_prompt": prompt_data["prompt"],
-                    "file_path": manifest_path
+                    "file_path": manifest_path,
+                    "expect_json": True  # [A] Rule analysis requires JSON output
                 }
 
                 raw_result = self.llm_client.analyze_code(code_snippet, context)
+
+                # [FIX #2] Failed manifest analysis is not a clean verdict.
+                if self._is_failed_response(raw_result):
+                    log.warning(f"LLM analysis failed for manifest rule '{rule_name}'; marking as Error (not clean).")
+                    results.append(self._build_error_result(manifest_path, rule_name, prompt_data["name"]))
+                    continue
+
                 parsed_result = self._parse_llm_response(raw_result)
+
+                # [B] Non-empty but unparseable output -> Error, not clean.
+                if parsed_result.get("_parse_failed"):
+                    log.warning(f"Unparseable LLM output for manifest rule '{rule_name}'; marking as Error.")
+                    results.append(self._build_error_result(manifest_path, rule_name, prompt_data["name"], reason="unparseable"))
+                    continue
+
                 status = self.get_status(parsed_result)
-                
+
                 # Enrich with MASVS
                 if status == "Vulnerable":
                     parsed_result = self._enrich_result(rule_name, parsed_result)
@@ -677,13 +831,26 @@ class Engine:
         context = {
             "system_prompt": self._load_system_prompt(),
             "vuln_prompt": prompt_data["prompt"],
-            "file_path": strings_path
+            "file_path": strings_path,
+            "expect_json": True  # [A] Rule analysis requires JSON output
         }
 
         raw_result = self.llm_client.analyze_code(code_snippet, context)
+
+        # [FIX #2] Failed strings.xml analysis is not a clean verdict.
+        if self._is_failed_response(raw_result):
+            log.warning(f"LLM analysis failed for '{rule_name}' on strings.xml; marking as Error (not clean).")
+            return [self._build_error_result(strings_path, rule_name, prompt_data["name"])]
+
         parsed_result = self._parse_llm_response(raw_result)
+
+        # [B] Non-empty but unparseable output -> Error, not clean.
+        if parsed_result.get("_parse_failed"):
+            log.warning(f"Unparseable LLM output for '{rule_name}' on strings.xml; marking as Error.")
+            return [self._build_error_result(strings_path, rule_name, prompt_data["name"], reason="unparseable")]
+
         status = self.get_status(parsed_result)
-        
+
         if status == "Vulnerable":
             # [V1.1.3] DEFERRED GENERATION
             if self.settings.analysis.generate_exploit:
@@ -720,23 +887,33 @@ class Engine:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            # Simple chunking by class
-            chunks = content.split(".class ")
-            for chunk in chunks:
-                if not chunk.strip():
-                    continue
-                
-                full_chunk = ".class " + chunk
-                
+            # Chunk by class only for Smali, where each class is its own ".class " block.
+            # Java/Kotlin sources (JADX/hybrid) don't use that token — splitting on it would
+            # either leave the whole file as one misleadingly-prefixed chunk or mis-slice at
+            # class literals (e.g. `Foo.class ==`), so treat the file as a single chunk.
+            if file_path.endswith(".smali"):
+                chunks = [".class " + c for c in content.split(".class ") if c.strip()]
+            else:
+                chunks = [content] if content.strip() else []
+
+            # [FIX #3] Accumulate every chunk's summary per file instead of overwriting.
+            # A multi-class Smali file has several ".class" chunks; keeping only the last
+            # one lost context used by risk identification and cross-reference injection.
+            file_summaries = []
+            for full_chunk in chunks:
                 context = {
                     "system_prompt": "",
                     "vuln_prompt": summarize_prompt,
                     "file_path": file_path
                 }
-                
-                summary = self.llm_client.analyze_code(full_chunk, context)
-                summaries[file_path] = summary
+
+                # [#5] Cap oversized chunks before summarization too.
+                summary = self.llm_client.analyze_code(self._truncate_for_llm(full_chunk), context)
+                if summary and summary.strip():
+                    file_summaries.append(summary.strip())
                 log.debug(f"Summary for {file_path}: {summary}")
+
+            summaries[file_path] = "\n".join(file_summaries)
 
         log.success("Code summarization complete.")
         return summaries
@@ -926,7 +1103,7 @@ class Engine:
 
         smali_rules_enabled = any(
             enabled and rule_name not in ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack"]
-            for rule_name, enabled in self.settings.rules.dict().items()
+            for rule_name, enabled in self.settings.rules.model_dump().items()
         )
 
         self.summaries = {}
@@ -939,7 +1116,7 @@ class Engine:
             # --- DYNAMIC KEYWORD & REGEX GATHERING ---
             extra_keywords = []
             extra_regex = [] # [V1.2] Regex Support
-            for rule_name, enabled in self.settings.rules.dict().items():
+            for rule_name, enabled in self.settings.rules.model_dump().items():
                 if enabled and rule_name not in ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack", "strandhogg"]:
                      try:
                         prompt_path = f"config/prompts/vuln_rules/{rule_name}.yaml"
@@ -1134,6 +1311,7 @@ class Engine:
 
         # Clear previous findings before scan
         self.vulnerability_findings = []
+        self.analysis_errors = []  # [FIX #2] Reset unanalyzed-file tracker
 
         # Analyze the manifest file
         all_results = self.analyze_manifest(manifest_path, rules_to_run)
@@ -1145,14 +1323,14 @@ class Engine:
                     all_results.extend(strings_results)
             except NameError:
                 pass # strings_results might not be defined if scope skipped
-            # Analyze the identified files
-            # Note: analyze_file handles reading the file content logic.
-            # Does it handle .java? Yes, strictly text read.
-            # But context injection? CallGraph only knows Smali paths. 
-            # If passing .java, context injection (get_dependencies) currently fails or returns nothing.
-            # We accept this limitation for now (Java analysis has better inherent context).
+            # Analyze the identified files (may be .smali or .java).
+            # Context injection works for both: the call graph is Smali-based, but
+            # get_dependencies()/path_to_class() normalize .java paths (sources/) to the
+            # same class names, so JADX/hybrid Java files still receive dependency context.
             
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            max_workers = max(1, self.settings.analysis.max_workers)  # [#6] Configurable parallelism
+            log.info(f"Deep scanning with {max_workers} worker(s)...")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_file = {executor.submit(self.analyze_file, file_path, rules_to_run): file_path for file_path in target_files}
                 for future in track(concurrent.futures.as_completed(future_to_file), total=len(future_to_file), description="Deep scanning files...", console=console):
                     file_path = future_to_file[future]
@@ -1165,7 +1343,10 @@ class Engine:
         final_report = {
             "app_summary": app_summary,
             "attack_surface_map": attack_surface_map,
-            "results": all_results
+            "results": all_results,
+            # [FIX #2] Surface unanalyzed file/rule pairs so a failed scan can't be
+            # mistaken for a clean one.
+            "analysis_errors": self.analysis_errors,
         }
 
         # [V1.1.3] Generate Chained Exploits (Phase 2)
@@ -1177,6 +1358,20 @@ class Engine:
             import json
             json.dump(final_report, f, indent=2)
         log.success(f"Analysis complete. Results saved to {self.final_output_file}")
+
+        # [FIX #2] Warn loudly when some files/rules could not be analyzed.
+        if self.analysis_errors:
+            log.warning(
+                f"{len(self.analysis_errors)} file/rule check(s) could NOT be analyzed "
+                f"(LLM failures). These are marked status='Error' and must NOT be read as clean. "
+                f"See 'analysis_errors' in the report."
+            )
+
+        # [#4] Report cache effectiveness.
+        if hasattr(self.llm_client, "cache_stats"):
+            stats = self.llm_client.cache_stats()
+            if stats.get("enabled"):
+                log.info(f"Response cache: {stats['hits']} hit(s), {stats['misses']} miss(es).")
 
     def _load_system_prompt(self) -> str:
         with open("config/prompts/system_prompt.txt", "r") as f:

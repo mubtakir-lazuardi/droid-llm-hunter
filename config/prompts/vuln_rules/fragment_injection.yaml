@@ -25,5 +25,5 @@ prompt: |
 keywords:
   - "PreferenceActivity"
   - "isValidFragment"
-detection_pattern: ".super Landroid/preference/PreferenceActivity;"
+detection_pattern: "(\\.super Landroid/preference/PreferenceActivity;|extends\\s+PreferenceActivity)"
 tags: ["fragment_injection", "rce", "preference_activity"]
