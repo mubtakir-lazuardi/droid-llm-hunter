@@ -5,9 +5,10 @@ from core import log
 from typing import Dict, Any
 
 class GroqClient(BaseLLMClient):
-    def __init__(self, model: str, api_key: str):
+    def __init__(self, model: str, api_key: str, max_tokens: int = 4096):
         self.model = model
         self.api_key = api_key
+        self.max_tokens = max_tokens
         self.url = "https://api.groq.com/openai/v1/chat/completions"
 
     def analyze_code(self, code_snippet: str, context: Dict[str, Any]) -> str:
@@ -21,6 +22,7 @@ class GroqClient(BaseLLMClient):
         
         data = {
             "model": self.model,
+            "max_tokens": self.max_tokens,
             "messages": [
                 {
                     "role": "user",

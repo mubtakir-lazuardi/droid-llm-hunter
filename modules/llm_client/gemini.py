@@ -5,9 +5,10 @@ import requests
 import json
 
 class GeminiClient(BaseLLMClient):
-    def __init__(self, model: str, api_key: str):
+    def __init__(self, model: str, api_key: str, max_tokens: int = 4096):
         self.model = model
         self.api_key = api_key
+        self.max_tokens = max_tokens
         self.url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
 
     def analyze_code(self, code_snippet: str, context: Dict[str, Any]) -> str:
@@ -28,7 +29,10 @@ class GeminiClient(BaseLLMClient):
                         }
                     ]
                 }
-            ]
+            ],
+            "generationConfig": {
+                "maxOutputTokens": self.max_tokens
+            }
         }
 
         max_retries = 5

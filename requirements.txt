@@ -1,7 +1,9 @@
-typer
-loguru
-pyyaml
-pydantic
-langchain
-requests
-rich
+# Droid-LLM-Hunter dependencies — pinned for reproducible builds (v1.2.0).
+# Versions reflect the tested environment. Loosen to ~=X.Y.Z if you want
+# automatic patch updates, or bump deliberately and re-test.
+typer==0.27.0
+loguru==0.7.3
+PyYAML==6.0.3
+pydantic==2.13.4
+requests==2.34.2
+rich==15.0.0

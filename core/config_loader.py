@@ -4,18 +4,25 @@ from typing import Optional, Dict, List
 
 class LLMSettings(BaseModel):
     provider: str
+    # Ollama (uses `model` + `ollama_url`)
     model: str
-    api_key: Optional[str] = None
     ollama_url: Optional[str] = None
+    # Gemini
     gemini_model: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    # Groq
     groq_model: Optional[str] = None
     groq_api_key: Optional[str] = None
+    # OpenAI
     openai_model: Optional[str] = None
     openai_api_key: Optional[str] = None
+    # Anthropic
     anthropic_model: Optional[str] = None
     anthropic_api_key: Optional[str] = None
+    # OpenRouter
     openrouter_model: Optional[str] = None
     openrouter_api_key: Optional[str] = None
+    max_tokens: int = 4096  # [#6] Max output tokens per LLM call (avoid truncated JSON/exploit)
 
 class ApktoolSettings(BaseModel):
     path: Optional[str] = None
@@ -30,35 +37,39 @@ class AnalysisSettings(BaseModel):
     decompiler_mode: str = "apktool" # apktool, jadx, hybrid
     generate_exploit: bool = False
     scan_libraries: bool = False # [New V1.1.7]
+    max_workers: int = 2          # [#6] Parallel deep-scan threads
+    use_cache: bool = True        # [#4] Reuse identical LLM responses (resume-friendly)
+    max_input_chars: int = 30000  # [#5] Truncate oversized file content before sending to LLM
  # Default to True for backward compatibility
 
 
 class RulesSettings(BaseModel):
-    sql_injection: bool
-    webview_xss: bool
-    hardcoded_secrets: bool
-    webview_deeplink: bool
-    insecure_file_permissions: bool
-    intent_spoofing: bool
-    insecure_random_number_generation: bool
-    jetpack_compose_security: bool
+    # Fields are kept in alphabetical order — this is the order `dlh.py list-rules` prints.
     biometric_bypass: bool
-    graphql_injection: bool
-    exported_components: bool
     deeplink_hijack: bool
-    insecure_storage: bool
-    path_traversal: bool
-    insecure_webview: bool
-    universal_logic_flaw: bool 
-    pending_intent_hijacking: bool
-    fragment_injection: bool
-    zip_slip: bool
     deeplink_logic_bypass: bool
-    unsafe_reflection: bool
-    webview_file_access: bool
-    insecure_deserialization: bool
-    strandhogg: bool
+    exported_components: bool
+    fragment_injection: bool
+    graphql_injection: bool
+    hardcoded_secrets: bool
     hardcoded_secrets_xml: bool
+    insecure_deserialization: bool
+    insecure_file_permissions: bool
+    insecure_random_number_generation: bool
+    insecure_storage: bool
+    insecure_webview: bool
+    intent_spoofing: bool
+    jetpack_compose_security: bool
+    path_traversal: bool
+    pending_intent_hijacking: bool
+    sql_injection: bool
+    strandhogg: bool
+    universal_logic_flaw: bool
+    unsafe_reflection: bool
+    webview_deeplink: bool
+    webview_file_access: bool
+    webview_xss: bool
+    zip_slip: bool
 
 class Settings(BaseModel):
     llm: LLMSettings

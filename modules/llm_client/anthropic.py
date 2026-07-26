@@ -6,9 +6,10 @@ from typing import Dict, Any
 import time
 
 class AnthropicClient(BaseLLMClient):
-    def __init__(self, model: str, api_key: str):
+    def __init__(self, model: str, api_key: str, max_tokens: int = 4096):
         self.model = model
         self.api_key = api_key
+        self.max_tokens = max_tokens
         self.url = "https://api.anthropic.com/v1/messages"
 
     def analyze_code(self, code_snippet: str, context: Dict[str, Any]) -> str:
@@ -23,7 +24,7 @@ class AnthropicClient(BaseLLMClient):
         
         data = {
             "model": self.model,
-            "max_tokens": 4096,
+            "max_tokens": self.max_tokens,
             "messages": [
                 {
                     "role": "user",

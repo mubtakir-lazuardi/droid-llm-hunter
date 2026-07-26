@@ -17,6 +17,8 @@ Droid LLM Hunter uses a multi-stage process to analyze an APK:
 7.  **Chained Exploit Generation:** The engine generates exploits that leverage the Global Context to connect vulnerabilities across files.
 8.  **Enrichment & Reporting:** Vulnerabilities are mapped to **OWASP MASVS** standards, and a detailed JSON report is generated.
 
+> **💾 Response Cache (cross-cutting):** Every LLM call in the stages above — summarization, risk identification, deep-scan verification, app summary, and exploit generation — passes through a content-addressed cache first. A HIT returns the stored answer for free; a MISS calls the LLM and stores the successful result. This makes an interrupted scan resume for free on re-run. See [Configuration](CONFIGURATION.md#response-cache-analysisuse_cache).
+
 ---
 
 ## Pipeline Diagram
@@ -57,8 +59,11 @@ Droid LLM Hunter uses a multi-stage process to analyze an APK:
 |    (Match 'detection_pattern'?)                       |
 |       NO |             | YES                          |
 |          v             v                              |
-|       [ Skip ]      [ LLM VERIFICATION ]              |
-|                     (Context & Logic Check)           |
+|       [ Skip ]   [ CACHE CHECK ] --HIT--> [ Reuse ]   |
+|                        | MISS                         |
+|                        v                              |
+|                  [ LLM VERIFICATION ]                 |
+|                  (Context & Logic Check)              |
 |                                |                      |
 |                                v                      |
 |                     [ Validate Finding ]              |

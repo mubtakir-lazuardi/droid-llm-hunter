@@ -5,8 +5,9 @@ from core import log
 from typing import Dict, Any
 
 class OllamaClient(BaseLLMClient):
-    def __init__(self, model: str, url: str):
+    def __init__(self, model: str, url: str, max_tokens: int = 4096):
         self.model = model
+        self.max_tokens = max_tokens
         self.url = f"{url}/api/generate"
 
     def analyze_code(self, code_snippet: str, context: Dict[str, Any]) -> str:
@@ -18,9 +19,23 @@ class OllamaClient(BaseLLMClient):
 
         for attempt in range(max_retries):
             try:
+                payload = {
+                    "model": self.model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"num_predict": self.max_tokens},
+                }
+                # [A] Force valid JSON output for rule-analysis calls. Ollama's native
+                # format="json" constrains the model to emit JSON — this is what small
+                # local models (deepseek-coder, etc.) need since they otherwise answer in
+                # prose and break parsing. NOT set for summarize / risk-ID calls, which
+                # legitimately return free text.
+                if context.get("expect_json"):
+                    payload["format"] = "json"
+
                 response = requests.post(
                     self.url,
-                    json={"model": self.model, "prompt": prompt, "stream": False},
+                    json=payload,
                     timeout=600, # 10 minutes timeout
                 )
                 response.raise_for_status()

@@ -114,6 +114,43 @@ jadx:
 
 ---
 
+## Performance & Cost Controls
+
+These live under `analysis:` and `llm:` in `config/settings.yaml` and control speed, token cost, and resumability.
+
+### Response Cache (`analysis.use_cache`) — default `true`
+
+Every **successful** LLM response is cached on disk under `output/.dlh_cache/`, keyed by a hash of `model + system prompt + rule prompt + code`.
+
+- **Resume:** if a scan crashes or exhausts your rate limit, just run the **same command again** — completed calls are reused for free, only the unfinished ones hit the LLM.
+- **Dedup:** identical content analyzed twice costs a single call.
+
+Failed (empty) responses are never cached, so they are retried on the next run. The cache is *content-addressed*: change the model, a rule prompt, or the APK and the affected entries recompute automatically — no manual clearing needed.
+
+```bash
+# Disable for one run (force fresh calls, no resume):
+python dlh.py scan target.apk --no-cache
+
+# Reset the cache entirely:
+rm -rf output/.dlh_cache
+```
+
+At the end of a scan the log reports effectiveness, e.g. `Response cache: 40 hit(s), 2 miss(es).`
+
+### Parallelism (`analysis.max_workers`) — default `2`
+
+Number of files deep-scanned in parallel. Raise it for fast providers (Groq, Gemini); keep it low if you hit rate limits.
+
+### Input Truncation (`analysis.max_input_chars`) — default `30000`
+
+Caps how much file content is sent to the LLM per call (keeps the head + tail, drops the middle with a `[TRUNCATED …]` marker). Prevents oversized files from blowing the context window or inflating cost. Set `0` to disable.
+
+### Output Tokens (`llm.max_tokens`) — default `4096`
+
+Maximum tokens the LLM may return per call. Raise it if long JSON findings or generated exploits get cut off (a truncated response causes JSON parse failures).
+
+---
+
 ## Quick Config via CLI
 
 ```bash

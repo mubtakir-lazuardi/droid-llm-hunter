@@ -24,10 +24,27 @@ python dlh.py scan [APK file]
   python dlh.py scan target.apk --generate-exploit
   ```
 
+- **Library Hunter Mode — scan 3rd-party libraries (supply-chain audit):**
+  ```bash
+  python dlh.py scan target.apk --scan-libraries
+  ```
+  > Bypasses Smart Scope Protection to hunt backdoors/droppers (e.g. `DexClassLoader`) inside SDKs, using strict regex to save tokens.
+
+- **Combine flags (full offensive run):**
+  ```bash
+  python dlh.py scan target.apk --generate-exploit --scan-libraries
+  ```
+
 - **Skip the decompilation step:**
   ```bash
   python dlh.py --no-decompile scan target.apk
   ```
+
+- **Disable the LLM response cache (force fresh calls, no resume):**
+  ```bash
+  python dlh.py scan target.apk --no-cache
+  ```
+  > By default the cache is ON: a scan interrupted by a crash or rate limit resumes for free when you re-run the same command. See [Response Cache](CONFIGURATION.md#response-cache-analysisuse_cache).
 
 - **Run only specific rules:**
   ```bash
@@ -53,6 +70,11 @@ python dlh.py scan [APK file]
 
 ## Flags
 
+> **Ordering matters:** global flags go **before** the `scan` command; scan options go **after** `scan <apk>`.
+> Example: `python dlh.py -v --rules "sql_injection" scan target.apk --generate-exploit`
+
+### Global Flags (before the command)
+
 ```
 +--------------------+------+----------------------------------------------------+
 | Flag               | Short| Description                                        |
@@ -66,31 +88,57 @@ python dlh.py scan [APK file]
 +--------------------+------+----------------------------------------------------+
 ```
 
+### Scan Options (after `scan <apk>`)
+
+```
++---------------------+----------------------------------------------------------+
+| Option              | Description                                               |
++---------------------+----------------------------------------------------------+
+| --generate-exploit  | Generate PoC scripts for confirmed vulnerabilities.      |
+| --scan-libraries    | Library Hunter Mode: include 3rd-party libraries in the  |
+|                     | scan scope (supply-chain / backdoor audit).              |
+| --no-cache          | Disable the LLM response cache (force fresh calls, no    |
+|                     | resume) for this run.                                    |
++---------------------+----------------------------------------------------------+
+```
+
 ---
 
 ## Commands
 
+> **Tip:** `provider`, `model`, `filter-mode`, and `decompiler-mode` **print the current value** when called with no argument (e.g. `config filter-mode`). `attack-surface` and `context-injection` print status when called with no `--enable/--disable`.
+
 ```
-+------------------------------------+---------------------------------------------------------------+
-| Command                            | Description                                                   |
-+------------------------------------+---------------------------------------------------------------+
-| scan                               | Scan an APK file for vulnerabilities.                         |
-| scan [APK] --generate-exploit      | Generate PoC scripts for confirmed vulnerabilities.           |
-| config wizard                      | Run the interactive configuration wizard.                     |
-| config provider <provider>         | Set the LLM provider.                                         |
-| config model <model>               | Set the LLM model.                                            |
-| config rules --enable <rules>      | Enable rules.                                                 |
-| config rules --disable <rules>     | Disable rules.                                                |
-| config validate                    | Validate the configuration file.                              |
-| config show                        | Show the current configuration.                               |
-| config profile create <name>       | Create a new profile.                                         |
-| config profile list                | List all available profiles.                                  |
-| config profile switch <name>       | Switch to a different profile.                                |
-| config profile delete <name>       | Delete a profile.                                             |
-| config attack-surface --enable     | Enable attack surface map generation.                         |
-| config context-injection --enable  | Enable Cross-Reference Context Injection.                     |
-| config filter-mode                 | Set or show the filter mode.                                  |
-| config decompiler-mode             | Set or show decompiler mode (apktool, jadx, hybrid).          |
-| list-rules                         | List all available rules.                                     |
-+------------------------------------+---------------------------------------------------------------+
++---------------------------------------+------------------------------------------------------------+
+| Command                               | Description                                                |
++---------------------------------------+------------------------------------------------------------+
+| scan <apk>                            | Scan an APK file for vulnerabilities.                      |
+| scan <apk> --generate-exploit         | Generate PoC scripts for confirmed vulnerabilities.        |
+| scan <apk> --scan-libraries           | Library Hunter Mode (scan 3rd-party libraries).            |
+| scan <apk> --no-cache                 | Disable the LLM response cache for this run.               |
+| list-rules                            | List all available rules.                                  |
+|                                       |                                                            |
+| config wizard                         | Run the interactive configuration wizard.                  |
+| config show                           | Show the current (merged) configuration.                   |
+| config validate                       | Validate the configuration file.                           |
+| config provider [provider]            | Set — or show, if omitted — the LLM provider.              |
+| config model [model]                  | Set — or show, if omitted — the LLM model.                 |
+| config rules --enable <rules>         | Enable the given comma-separated rules.                    |
+| config rules --disable <rules>        | Disable the given comma-separated rules.                   |
+| config rules                          | List currently enabled rules.                              |
+| config filter-mode [mode]             | Set/show filter mode (static_only, llm_only, hybrid).      |
+| config decompiler-mode [mode]         | Set/show decompiler mode (apktool, jadx, hybrid).          |
+| config attack-surface --enable        | Enable attack surface map generation.                      |
+| config attack-surface --disable       | Disable attack surface map generation.                     |
+| config context-injection --enable     | Enable Cross-Reference Context Injection (Call Graph).     |
+| config context-injection --disable    | Disable Cross-Reference Context Injection.                 |
+|                                       |                                                            |
+| config profile                        | List available profiles.                                   |
+| config profile create <name>          | Create a new profile (runs the wizard).                    |
+| config profile list                   | List all available profiles.                               |
+| config profile switch <name>          | Switch the active config to a profile.                     |
+| config profile delete <name>          | Delete a profile.                                          |
++---------------------------------------+------------------------------------------------------------+
 ```
+
+> **Note:** Performance/cost knobs — `max_workers`, `max_input_chars` (`analysis:`), and `max_tokens` (`llm:`) — are set in `config/settings.yaml`, not via CLI. See [Configuration → Performance & Cost Controls](CONFIGURATION.md#performance--cost-controls).

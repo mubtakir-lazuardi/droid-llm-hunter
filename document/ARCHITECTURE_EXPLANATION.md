@@ -56,6 +56,33 @@ Some rules target **configuration files** (XML) rather than source code. These b
 
 ---
 
+## 💾 Cross-Cutting Layer: The Response Cache
+
+Wrapping **every** stage above is a content-addressed **response cache**. Before *any* request reaches the LLM — summarization, risk identification, deep-scan verification, app summary, or exploit generation — the engine computes a hash of `model + system prompt + rule prompt + code` and checks disk (`output/.dlh_cache/`):
+
+```text
+        [ Any LLM call ]
+              |
+              v
+     +------------------+     HIT     +--------------------------+
+     |   CACHE CHECK    |------------>|  Return stored response  |
+     |  (hash lookup)   |             |   (0 tokens, instant)    |
+     +------------------+             +--------------------------+
+              | MISS
+              v
+     +------------------+   success   +--------------------------+
+     |  Call real LLM   |------------>|  Write response to cache |
+     +------------------+             +--------------------------+
+              | (empty / failed response -> NOT cached, retried later)
+```
+
+*   **HIT:** the stored response is returned instantly, at zero token cost.
+*   **MISS:** the LLM is called, and only a **successful** response is written back. Failed (empty) responses are never cached, so a later run retries them.
+
+This turns an interrupted scan (crash, rate limit) into a **free resume** — re-running the same command replays completed work from cache and only spends tokens on what remains — and deduplicates identical chunks within a single run. Because the key includes the model and prompt, changing either recomputes automatically. Toggle via `analysis.use_cache` or `--no-cache`. See [Configuration](CONFIGURATION.md#performance--cost-controls).
+
+---
+
 ## 🛠️ Technical Implementation
 
 1.  **Engine (`code_filter.py` & `engine.py`):**

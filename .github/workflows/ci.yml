@@ -6,6 +6,25 @@ on:
   pull_request:
 
 jobs:
+  test:
+    name: Unit Tests (deterministic, no LLM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run test suite
+        # Layer-1 golden tests: detection-pattern coverage, engine pure functions,
+        # and config invariants. No LLM / network required.
+        run: pytest -q
+
   build-and-verify:
     name: Build & Sanity Check
     runs-on: ubuntu-latest

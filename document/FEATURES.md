@@ -45,6 +45,8 @@
 
 - **🤖 Multi-Provider Support:** Run locally with **Ollama** (free & private) or scale up with **Gemini**, **Groq**, **OpenAI**, **Anthropic**, and **OpenRouter**.
 
+- **💾 Response Cache & Resume:** Every successful LLM response is cached (content-addressed by model + prompt + code). A scan interrupted by a crash or rate limit **resumes for free** on re-run — only unfinished work calls the LLM. Configurable parallelism (`max_workers`), input truncation (`max_input_chars`), and output limit (`max_tokens`) round out the cost controls. [Read the Docs](CONFIGURATION.md#performance--cost-controls)
+
 ---
 
 ## 💥 Output & Exploitation
