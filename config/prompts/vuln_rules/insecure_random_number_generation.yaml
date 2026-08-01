@@ -1,18 +1,22 @@
 name: "Insecure Random Number Generation"
 description: "Detects the use of insecure random number generators."
 prompt: |
-  Analyze the following smali code snippet for the use of insecure random number generators.
-  Specifically, look for the use of `Ljava/util/Random;`. This class is not cryptographically secure and should not be used for security-sensitive applications.
-  Instead, `Ljava/security/SecureRandom;` should be used.
+  Analyze the following decompiled Android code (Java or Smali) for Insecure Random Number Generation.
+
+  Vulnerability pattern:
+  - `java.util.Random` (Smali `Ljava/util/Random;`) or a time-seeded PRNG is used to produce a value
+    used in a SECURITY context — session token, OTP, password-reset token, nonce, ID, key material.
+  - `java.util.Random` is predictable (not cryptographically secure); `java.security.SecureRandom`
+    must be used for such values.
+
+  Not vulnerable if `Random` is used only for non-security purposes (animations, shuffling UI, jitter).
+  Judge by how the generated value is USED.
 
   Code:
-  ```smali
+  ```
   {code_snippet}
   ```
 
-  Context:
-  - File Path: {file_path}
-
-  Is there an insecure random number generation vulnerability in this code? If yes, explain the risk and suggest a remediation.
+  Context: file = {file_path}
 tags: ["crypto", "random"]
 detection_pattern: "(Ljava/util/Random;|java\\.util\\.Random|new Random\\()"

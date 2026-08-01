@@ -11,7 +11,7 @@ Droid LLM Hunter uses a multi-stage process to analyze an APK:
 1.  **Decompilation:** The APK is decompiled using **Apktool** (for Smali/Manifest) and optionally **JADX** (for Java Source), depending on the `decompiler_mode`.
 2.  **Smart Filtering:** Based on the `filter_mode`, the engine identifies potentially risky files using Static Analysis (`static_only`), AI Summarization (`llm_only`), or both (`hybrid`).
 3.  **Smart Scope Protection:** Irrelevant files (libraries) are discarded based on `package` name and blocklists.
-4.  **Risk Identification:** High-level analysis determines which files require deep inspection.
+4.  **Risk Identification:** High-level analysis determines which files require deep inspection. **[v1.3.0]** As a recall safeguard, first-party files whose content matches an enabled rule's `detection_pattern` skip this triage and are always deep-scanned (a strong static signal is never dropped).
 5.  **Deep Dive Analysis:** Risky files are scanned for vulnerabilities.
 6.  **Global Context Building:** All findings are summarized to create a "Global Context".
 7.  **Chained Exploit Generation:** The engine generates exploits that leverage the Global Context to connect vulnerabilities across files.
@@ -104,4 +104,16 @@ Droid LLM Hunter uses a multi-stage process to analyze an APK:
 
 ## JSON Report Structure
 
-For more detailed information on the **JSON Report** structure, see the [output/](../output/) directory for example reports.
+The report is a JSON object with:
+- **`app_summary`** — executive summary of the app's capabilities.
+- **`attack_surface_map`** — entry-point map (only if `generate_attack_surface_map` is enabled).
+- **`results`** — a list of findings. Each has `file`, `rule`, `vulnerability` (name), `status`
+  (`Vulnerable` / `Not Vulnerable` / `Error`), and a structured `result` (severity, confidence,
+  evidence, description, attack_scenario, recommendation, MASVS reference, …).
+  - **[v1.3.0] `also_detected_by`** — when several overlapping rules flag the SAME file (e.g. the
+    WebView trio, or the broad `universal_logic_flaw`), they are collapsed into one primary finding
+    and the rest are listed here — nothing is lost, the report is just less noisy.
+- **[v1.2.0] `analysis_errors`** — file/rule checks that could NOT be analyzed (empty or unparseable
+  LLM response). These are `status: "Error"` and must be treated as **unanalyzed, not clean**.
+
+For example reports, see the [output/](../output/) directory.

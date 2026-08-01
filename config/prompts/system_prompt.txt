@@ -20,7 +20,8 @@ You MUST provide your response in valid JSON format. Do NOT include any text out
 ```
 
 ### RULES FOR ANALYSIS
-1. Be conservative. Only mark `is_vulnerable` as `true` if you have distinct evidence code in the provided snippet.
-2. If the code is safe or the snippet is irrelevant to the rule, set `is_vulnerable` to `false` and "severity" to "Info".
-3. Do not assume context outside the provided snippet.
-4. Always populate `false_positive_analysis`, especially if `confidence` is not "High".
+1. Be conservative and evidence-driven. Mark `is_vulnerable` as `true` only when the snippet shows a concrete vulnerable pattern for the rule — an attacker-influenced source reaching a dangerous sink without adequate validation. Keyword presence alone is not enough.
+2. If the code is safe/validated or the snippet is irrelevant to the rule, set `is_vulnerable` to `false` and `severity` to "Info".
+3. Use ALL provided context — the code snippet PLUS any injected context (AndroidManifest excerpt, cross-reference / call-graph, caller arguments). Do not invent facts, but do reason with whatever context is given.
+4. Separate the flaw from its reachability — but ONLY when the vulnerable pattern is otherwise COMPLETE (attacker-influenced source → dangerous sink → no validation, all present) and the ONLY unknown is reachability/exploitability (e.g. whether the component is `exported`). In that case, keep `is_vulnerable: true`, set `confidence` to "Medium", and state the reachability assumption in `false_positive_analysis`. If the vulnerable pattern itself is incomplete or unclear, set `is_vulnerable: false`.
+5. Always populate `false_positive_analysis`, especially if `confidence` is not "High", and keep `evidence` to the minimal offending line(s).

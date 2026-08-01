@@ -1,6 +1,21 @@
-Based on the following AndroidManifest.xml file and the summaries of the application's code, please generate an attack surface map for the application.
-The attack surface map should be a list of all the points where an attacker can try to enter data or extract data from the application.
-Focus on exported components, deep links, network communication, file I/O, and user input.
+Based on the following AndroidManifest.xml file and the summaries of the application's code, extract a compact attack-surface INVENTORY.
+
+This is NOT a report — it is machine-readable data for a downstream tool to render. Do not explain, describe impact, or narrate. No prose, no markdown, no code fences, no commentary before or after. Output ONLY a single flat JSON object with exactly these keys:
+
+- exported_activities: array of short class names (not fully qualified) of exported activities.
+- exported_receivers: array of short class names of exported broadcast receivers.
+- exported_services: array of short class names of exported services.
+- exported_providers: array of short class names of exported content providers.
+- deep_links: array of objects, each with exactly three string fields: scheme, host, handler (the short class name that handles it). Use "*" for a wildcard host.
+- unprotected_broadcasts: array of exported broadcast action strings that have no permission attribute guarding them.
+- network: array of short lowercase tags for network/data technologies evident in the code summaries (e.g. "webview", "graphql", "http", "grpc"). Empty array if none evident.
+- file_io: boolean, true only if the code summaries show file read/write/extraction logic.
+- ipc: boolean, true only if the code summaries show Intent/PendingIntent forwarding, redirection, or dynamic broadcast beyond simple navigation.
+- deserialization: boolean, true only if the code summaries show object deserialization (e.g. ObjectInputStream).
+- reflection: boolean, true only if the code summaries show reflective class loading or invocation.
+- manifest_flags: object with boolean fields debuggable and allow_backup, set from the manifest's android:debuggable and android:allowBackup attributes (omit a field if the attribute is absent).
+
+Every array must contain only short identifiers or short tag strings — never sentences. If a key has nothing to report, use an empty array (or false for booleans, or an empty object for manifest_flags). Do not add any key not listed above.
 
 AndroidManifest.xml:
 ```xml

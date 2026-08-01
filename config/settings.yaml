@@ -1,7 +1,7 @@
 # Droid-LLM-Hunter Settings
 analysis:
   decompiler_mode: hybrid # hybrid, apktool, or jadx
-  filter_mode: static_only # static_only, llm_only, or hybrid
+  filter_mode: hybrid # static_only, llm_only, or hybrid
   generate_attack_surface_map: true # Generate attack surface map
   generate_exploit: false # Generate PoC scripts for vulnerabilities
   scan_libraries: false # If true, includes 3rd party libraries in scan scope.
@@ -20,7 +20,7 @@ jadx:
 
 # LLM Configuration
 llm:
-  provider: ollama # or "ollama" or "gemini" or "groq" or "openai" or "anthropic"
+  provider: ollama # or "ollama" or "gemini" or "groq" or "openai" or "anthropic" or "openrouter" or "router9"
   anthropic_api_key: ANTHROPIC_API_KEY # Replace with your Anthropic API key
   anthropic_model: claude-sonnet-4-20250514 # default model for anthropic or "claude-sonnet-4-5-20250929"
   gemini_api_key: GEMINI_API_KEY # Replace with your Gemini API key
@@ -32,8 +32,13 @@ llm:
   openai_api_key: OPENAI_API_KEY # Replace with your OpenAI API key
   openai_model: gpt-4-turbo # default model for openai or "gpt-4-turbo"
   openrouter_api_key: OPENROUTER_API_KEY # Replace with your OpenRouter API key
-  openrouter_model: google/gemini-2.5-flash #  default model for openrouter or "google/gemini-2.5-pro"
-  max_tokens: 4096 # [#6] Max output tokens per LLM call (raise if JSON/exploit output gets cut off)
+  openrouter_model: moonshotai/kimi-k3 #  default model for openrouter or "google/gemini-2.5-pro"
+  router9_api_key: 9ROUTER_API_KEY # Replace with your 9Router API key
+  router9_base_url: http://localhost:20128/v1/chat/completions # self-hosted; change host/port to match your instance
+  router9_model: cx/gpt-5.6-sol # default model for router9 (provider-prefixed, e.g. "gc/gemini-2.5-pro", "cx/gpt-5.6-sol"). If it's a reasoning model, raise max_tokens (reasoning tokens count against it)
+  exploit_provider: anthropic # --generate-exploit routed here (router9/jem-glm-5.2 returned empty for exploit-gen, confirmed live); reuses anthropic_api_key/anthropic_model above
+  exploit_model: null # optional: override the model used for exploit-gen on exploit_provider (or on `provider`, if exploit_provider is unset)
+  max_tokens: 8192 # [#6] Max output tokens per LLM call (raise if JSON/exploit output gets cut off)
 
 # Analysis Rules
 # Enable or disable specific vulnerability checks
@@ -46,11 +51,12 @@ rules:
   graphql_injection: false # Dynamic GraphQL query construction
   hardcoded_secrets: false # Critical API Keys & Secrets in code
   hardcoded_secrets_xml: false # Secrets hidden in strings.xml
-  insecure_deserialization: true # RCE via ObjectInputStream.readObject
+  insecure_deserialization: false # RCE via ObjectInputStream.readObject
   insecure_file_permissions: false # World-readable files/SharedPreferences
   insecure_random_number_generation: false # Weak PRNG (java.util.Random)
   insecure_storage: false # Plain-text credentials in XML/Files
   insecure_webview: false # Dangerous WebSettings (FileAccess)
+  intent_redirection: true # Confused-deputy: forwarding attacker's nested Intent
   intent_spoofing: false # Unauthorized Broadcast Receivers
   jetpack_compose_security: false # Debug flags in Compose UI
   path_traversal: false # Local File Inclusion via ContentProvider

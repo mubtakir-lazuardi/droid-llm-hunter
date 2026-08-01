@@ -1,18 +1,22 @@
 name: "Path Traversal"
 description: "Detects path traversal vulnerabilities in ContentProviders."
 prompt: |
-  Analyze the following smali code snippet for path traversal vulnerabilities.
-  Specifically, look for the use of `ContentProvider` and check if the `openFile` method is properly implemented to prevent path traversal attacks.
-  A vulnerability exists if a malicious user can access files outside of the intended directory.
+  Analyze the following decompiled Android code (Java or Smali) for Path Traversal (Local File Inclusion).
+
+  Vulnerability pattern:
+  - A file path is built from a TAINTED value (Intent extra, deep-link/query param, ContentProvider
+    `openFile(uri)` segment, user text) and used in `new File(dir, name)`, `FileInputStream`,
+    `FileOutputStream`, or a `ContentProvider.openFile` — WITHOUT sanitizing `..` / absolute paths.
+  - The classic guard is MISSING: no `getCanonicalPath()` check confirming the resolved file stays
+    inside the intended base directory.
+
+  Not vulnerable if the filename is constant, or a canonical-path/allowlist check is enforced.
 
   Code:
-  ```smali
+  ```
   {code_snippet}
   ```
 
-  Context:
-  - File Path: {file_path}
-
-  Is there a potential path traversal vulnerability in this code? If yes, explain how it could be exploited and suggest a remediation.
+  Context: file = {file_path}
 tags: ["storage", "contentprovider", "path-traversal"]
-detection_pattern: "openFile"
+detection_pattern: "(openFile|FileInputStream|FileOutputStream)\\s*\\("

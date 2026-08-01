@@ -1,18 +1,21 @@
 name: "Intent Spoofing"
 description: "Detects exported components that are not properly protected and could be vulnerable to intent spoofing."
 prompt: |
-  Analyze the following AndroidManifest.xml snippet for vulnerabilities related to intent spoofing.
-  Specifically, look for exported activities, services, or receivers that do not have a permission attribute or have a permission that is not strong enough.
-  An attacker could send an intent to these components and perform unauthorized actions.
+  Analyze the following AndroidManifest.xml for Intent Spoofing exposure.
+
+  Vulnerability pattern:
+  - An exported `<receiver>` (or activity/service) declares an `<intent-filter>` for a custom action
+    but has NO `android:permission` (or only a `normal`-level one).
+  - A malicious app can then SPOOF that Intent/broadcast to trigger a sensitive action (e.g. a fake
+    "password reset" / state change), because the component trusts the action without verifying the sender.
+
+  Recommend a signature-level permission, or `LocalBroadcastManager` for internal-only events.
 
   AndroidManifest.xml:
   ```xml
   {code_snippet}
   ```
 
-  Context:
-  - File Path: {file_path}
-
-  Is there an Intent Spoofing vulnerability in this manifest? If yes, explain the risk and provide a recommendation.
+  Context: file = {file_path}
 tags: ["manifest", "intent", "spoofing"]
 detection_pattern: "android:exported=[\"']true[\"']"

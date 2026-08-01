@@ -1,0 +1,69 @@
+{
+  "_about": "Layer-2 semantic recall baseline for VulnerAppDLHv2. Ground truth derived from the app's SOURCE CODE (see VulnerAppDLH/VULNER_DLH.md + the .kt sources), not from a past scan. The Layer-2 harness runs a scan of VulnerAppDLHv2.apk and asserts findings COVER 'expected' (recall contract) and respect 'must_not_fire' (precision guards).",
+  "app": "VulnerAppDLHv2.apk",
+  "derived_from": "source-code ground truth (2026-07); v2 testbed expansion 2026-07-27",
+  "matching": "Compare by filename STEM (extension-agnostic): 'SQLInjectionActivity' matches SQLInjectionActivity.java/.kt/.smali; 'AndroidManifest' matches AndroidManifest.xml; 'strings' matches res/values/strings.xml. Assert on RAW findings (before [E] report-dedup).",
+  "harness_notes": "The scan MUST enable all rules listed under 'expected' (they are off by default in settings.yaml). Record which model produced this baseline; re-record if the model changes (recall is model-sensitive).",
+  "baseline_model": "moonshotai/kimi-k3 (OpenRouter)",
+  "baseline_recorded": "2026-07-26 (v1, 16 TPs); v2 expansion verified 2026-07-27 (floor 25/25)",
+  "baseline_recall": "VERIFIED 25/25 with kimi-k3 on 2026-07-27 (recall + precision green). Floor = 16 v1 TPs + 8 v2 TPs + hardcoded_secrets on WebViewActivity (a real getSecrets() token the v1 baseline had omitted).",
+
+  "v2_verification_resolved": {
+    "_note": "Both anticipated v2 risks were hit and fixed during Phase 4 verification.",
+    "pending_intent_hijacking": "CONFIRMED: JADX inlined FLAG_MUTABLE -> 33554432, so the literal-only pattern missed it. Fixed: detection_pattern now matches (FLAG_MUTABLE|33554432).",
+    "zip_slip": "CONFIRMED: pattern matched but the LLM risk-triage (identify_risky_chunks) dropped ZipSlipActivity before rule gating. Fixed: engine now deep-scans first-party files that match a detection_pattern, bypassing the triage (Engine._pattern_matched_files).",
+    "hardcoded_secrets_xml": "CONFIRMED: finding file stem is 'strings' (res/values/strings.xml)."
+  },
+
+  "closed_gaps_v1_2_1": {
+    "insecure_file_permissions": "T2.2a — added set(Readable|Writable)(true,false) to detection_pattern + prompt; app used setReadable(true,false), not MODE_WORLD_* constants.",
+    "universal_logic_flaw": "T3.4a — removed narrow detection_pattern so per-rule gating (#1) no longer skips conceptual flaws; now LLM-exclusive, runs on all risky files."
+  },
+
+  "expected": {
+    "sql_injection": ["SQLInjectionActivity"],
+    "webview_xss": ["WebViewActivity"],
+    "insecure_webview": ["WebViewActivity"],
+    "webview_file_access": ["WebViewActivity"],
+    "graphql_injection": ["GraphQLInjectionActivity"],
+    "path_traversal": ["InsecureFileActivity"],
+    "insecure_file_permissions": ["InsecureFileActivity"],
+    "hardcoded_secrets": ["SecretsActivity", "WebViewActivity"],
+    "insecure_storage": ["SecretsActivity"],
+    "insecure_random_number_generation": ["CryptoActivity"],
+    "biometric_bypass": ["CryptoActivity"],
+    "universal_logic_flaw": ["CryptoActivity"],
+    "exported_components": ["AndroidManifest"],
+    "intent_spoofing": ["AndroidManifest"],
+    "deeplink_hijack": ["AndroidManifest"],
+    "webview_deeplink": ["AndroidManifest"],
+
+    "insecure_deserialization": ["DeserializationActivity"],
+    "unsafe_reflection": ["ReflectionActivity"],
+    "pending_intent_hijacking": ["PendingIntentActivity"],
+    "zip_slip": ["ZipSlipActivity"],
+    "intent_redirection": ["IntentRedirectionActivity"],
+    "fragment_injection": ["FragmentInjectionActivity"],
+    "strandhogg": ["AndroidManifest"],
+    "hardcoded_secrets_xml": ["strings"]
+  },
+
+  "optional": {
+    "_note": "Plausible true-positives the code supports but not required for the recall contract. NOTE: universal_logic_flaw also over-fires on SpoofableReceiver & UnprotectedExportedActivity (trust-of-external-input) — known broad-ULF behavior, NOT a precision violation (must_not_fire guards only library files).",
+    "deeplink_logic_bypass": ["WebViewActivity", "UnprotectedExportedActivity"],
+    "path_traversal": ["ZipSlipActivity"],
+    "hardcoded_secrets": ["SQLInjectionActivity"]
+  },
+
+  "must_not_fire": {
+    "_note": "Precision guards. strandhogg is now a REAL TP in v2 (HijackTargetActivity manifest) so it was removed from here. universal_logic_flaw must not fire on library internals (it over-fired 1 TP : 8 FP in past scans — see [D]).",
+    "universal_logic_flaw": ["DebugProbesImpl", "FastServiceLoader"]
+  },
+
+  "uncovered_rules": {
+    "_note": "Rules DLH supports that VulnerAppDLHv2 does NOT exercise. Only jetpack_compose_security remains (it needs Jetpack Compose; it will get its own separate Compose testbed app later).",
+    "rules": [
+      "jetpack_compose_security"
+    ]
+  }
+}

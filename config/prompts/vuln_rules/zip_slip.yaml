@@ -22,7 +22,7 @@ prompt: |
     ```
   
   Code to Analyze:
-  ```java
+  ```
   {code_snippet}
   ```
   
@@ -39,5 +39,5 @@ keywords:
   - "ZipEntry"
   - "getCanonicalPath"
   - "ZipFile"
-detection_pattern: "ZipEntry.*\\.getName"
+detection_pattern: "ZipEntry.*(?:\\.|->)getName"
 tags: ["zip_slip", "path_traversal", "file_overwrite"]

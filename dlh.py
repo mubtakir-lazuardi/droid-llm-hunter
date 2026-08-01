@@ -165,6 +165,7 @@ def set_model(model: str = typer.Argument(None, help="The LLM model to use.")):
         "openai": "openai_model",
         "anthropic": "anthropic_model",
         "openrouter": "openrouter_model",
+        "router9": "router9_model",
     }
     
     if model is None:
@@ -390,7 +391,7 @@ def config_wizard():
     
     print("Welcome to the Droid LLM Hunter configuration wizard!")
     
-    provider = typer.prompt("Select LLM provider (ollama, gemini, groq, openai, anthropic, openrouter)")
+    provider = typer.prompt("Select LLM provider (ollama, gemini, groq, openai, anthropic, openrouter, router9)")
     
     if provider == "ollama":
         model = typer.prompt("Enter Ollama model name")
@@ -452,8 +453,23 @@ def config_wizard():
                 "openrouter_api_key": openrouter_api_key
             }
         }
+    elif provider == "router9":
+        router9_model = typer.prompt("Enter 9Router model name (e.g. gc/gemini-2.5-pro)")
+        router9_api_key = typer.prompt("Enter 9Router API key")
+        router9_base_url = typer.prompt(
+            "Enter 9Router base URL",
+            default="http://localhost:20128/v1/chat/completions"
+        )
+        settings = {
+            "llm": {
+                "provider": provider,
+                "router9_model": router9_model,
+                "router9_api_key": router9_api_key,
+                "router9_base_url": router9_base_url
+            }
+        }
     else:
-        print(f"Invalid provider '{provider}'. Choose from: ollama, gemini, groq, openai, anthropic, openrouter")
+        print(f"Invalid provider '{provider}'. Choose from: ollama, gemini, groq, openai, anthropic, openrouter, router9")
         raise typer.Exit()
 
     try:

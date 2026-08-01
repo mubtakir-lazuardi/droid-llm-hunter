@@ -12,6 +12,8 @@
 
 - **📚 RAG with OWASP MASVS:** Findings are automatically enriched with the relevant **OWASP Mobile Application Security Verification Standard (MASVS)** ID (e.g., `MASVS-STORAGE-1`) for rules that have a MASVS mapping defined, making your reports audit-ready instantly.
 
+- **✅ Testbed-Verified Detection:** Detection quality is validated end-to-end by an opt-in semantic Golden Test (`pytest -m llm`) that scans **VulnerAppDLH v2.0.0** and asserts a **25/25 recall contract** with precision guards, across **26 rules**.
+
 ---
 
 ## 🔍 Scanning Strategy
@@ -22,6 +24,8 @@
   - **`hybrid`:** The best of both worlds — Static keywords filter the noise, AI verifies the danger.
 
 - **🏗️ Hybrid Architecture (v1.1.5):** A revolutionary "Search → Regex Filter → LLM" pipeline that drastically reduces token usage and increases speed. [Read the Docs](ARCHITECTURE_EXPLANATION.md)
+
+- **🎯 Recall Safeguard (v1.3.0):** In `hybrid` mode, first-party files matching a rule's `detection_pattern` are always deep-scanned — a strong static signal is never discarded by the AI risk-triage. [Read the Docs](ARCHITECTURE_EXPLANATION.md)
 
 - **🛡️ Smart Scope Protection:** The "Immune System" of the scanner. Automatically filters out library code (e.g., `androidx`, `google`, `r0.java`) using a combination of **Package Whitelisting** (via Manifest) and **Library Blocklisting**. [Read the Docs](EXPLOIT_GENERATOR.md#1-smart-scope-filtering-the-immune-system)
 
@@ -43,7 +47,7 @@
 
 - **🛠️ Flexible Configuration:** A simple yet powerful configuration file (`config/settings.yaml`) allows for easy management of LLM providers, models, rules, and **Decompiler Settings** (Apktool/JADX).
 
-- **🤖 Multi-Provider Support:** Run locally with **Ollama** (free & private) or scale up with **Gemini**, **Groq**, **OpenAI**, **Anthropic**, and **OpenRouter**.
+- **🤖 Multi-Provider Support:** Run locally with **Ollama** (free & private) or scale up with **Gemini**, **Groq**, **OpenAI**, **Anthropic**, **OpenRouter**, and **9Router** (a self-hosted, OpenAI-compatible router that fans out to many providers/models behind one endpoint).
 
 - **💾 Response Cache & Resume:** Every successful LLM response is cached (content-addressed by model + prompt + code). A scan interrupted by a crash or rate limit **resumes for free** on re-run — only unfinished work calls the LLM. Configurable parallelism (`max_workers`), input truncation (`max_input_chars`), and output limit (`max_tokens`) round out the cost controls. [Read the Docs](CONFIGURATION.md#performance--cost-controls)
 
@@ -52,6 +56,8 @@
 ## 💥 Output & Exploitation
 
 - **📊 Structured Security Reports:** Get detailed JSON output containing severity, confidence scores, evidence snippets, and even an "Attack Surface Map" of the application.
+
+- **🧹 Clean, De-duplicated Findings:** Overlapping rules that flag the same file (e.g. the WebView trio) are collapsed into one primary finding with an `also_detected_by` list — no lost data, far less noise. Analysis failures are reported honestly as `Error` (never silently marked "clean").
 
 - **💥 Auto-Exploit Generation:** Automatically generates actionable **Proof-of-Concept (PoC)** scripts (Bash, HTML, Python, JS) for confirmed vulnerabilities, proving the impact instantly. [Read the Docs](EXPLOIT_GENERATOR.md)
 

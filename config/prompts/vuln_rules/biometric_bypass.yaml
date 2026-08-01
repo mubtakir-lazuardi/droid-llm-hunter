@@ -1,18 +1,22 @@
 name: "Biometric Authentication Bypass"
 description: "Detects potential weaknesses in the implementation of biometric authentication."
 prompt: |
-  Analyze the following smali code snippet for potential biometric authentication bypass vulnerabilities.
-  Specifically, look for implementations of `BiometricPrompt` and check if the `onAuthenticationSucceeded` callback is properly secured.
-  A vulnerability exists if the success callback can be easily triggered without actual biometric authentication, for example, by manipulating the application's control flow.
+  Analyze the following decompiled Android code (Java or Smali) for Biometric Authentication Bypass.
+
+  Vulnerability pattern:
+  - `BiometricPrompt` (or fingerprint APIs) is used, but the "authenticated" decision rests on a
+    CLIENT-SIDE flag/boolean that control-flow can reach without real authentication.
+  - Examples: success gated by `if (success || true)`, a mutable `isAuthenticated` field set outside
+    the `onAuthenticationSucceeded` callback, or empty/incorrect `onAuthenticationFailed` handling.
+  - No cryptographic binding (e.g. unlocking a Keystore key inside `onAuthenticationSucceeded`).
+
+  Not vulnerable if the sensitive action is cryptographically bound to a successful auth result.
 
   Code:
-  ```smali
+  ```
   {code_snippet}
   ```
 
-  Context:
-  - File Path: {file_path}
-
-  Is there a potential biometric authentication bypass vulnerability in this code? If yes, explain how it could be exploited and suggest a remediation.
+  Context: file = {file_path}
 tags: ["biometric", "authentication", "bypass"]
 detection_pattern: "BiometricPrompt"

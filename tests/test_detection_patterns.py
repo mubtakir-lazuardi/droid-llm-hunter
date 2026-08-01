@@ -43,6 +43,7 @@ POSITIVE = {
     "insecure_random_number_generation": "Random r = new Random();",
     "insecure_storage": 'getSharedPreferences("p", MODE_PRIVATE);',
     "insecure_webview": 'webView.addJavascriptInterface(new Bridge(), "app");',
+    "intent_redirection": 'Intent fwd = (Intent) intent.getParcelableExtra("i"); startActivity(fwd);',
     "intent_spoofing": '<receiver android:name=".R" android:exported="true"/>',
     "jetpack_compose_security": "@Composable fun LoginScreen() {}",
     "library_vulnerability": "DexClassLoader cl = new DexClassLoader(path, opt, null, parent);",
@@ -50,15 +51,16 @@ POSITIVE = {
     "pending_intent_hijacking": "PendingIntent.getActivity(ctx, 0, i, PendingIntent.FLAG_MUTABLE);",
     "sql_injection": 'db.rawQuery("SELECT * FROM u WHERE n=" + name, null);',
     "unsafe_reflection": 'Class.forName(intent.getStringExtra("cls"));',
-    "universal_logic_flaw": "public boolean shouldOverrideUrlLoading(WebView v, String url) {",
     "webview_deeplink": '<action android:name="android.intent.action.VIEW"/>',
     "webview_file_access": "settings.setAllowFileAccess(true);",
     "webview_xss": "settings.setJavaScriptEnabled(true);",
     "zip_slip": "for (ZipEntry e : zip.entries()) { new File(dir, e.getName()); }",
 }
 
-# Rules that intentionally have NO detection_pattern (keyword-only / manifest heuristic).
-NO_PATTERN = {"strandhogg", "hardcoded_secrets_xml"}
+# Rules that intentionally have NO detection_pattern (keyword-only / manifest heuristic /
+# LLM-exclusive). universal_logic_flaw is LLM-exclusive (v1.3.0 T3.4a): no pattern so gating
+# never skips a conceptual flaw.
+NO_PATTERN = {"strandhogg", "hardcoded_secrets_xml", "universal_logic_flaw"}
 
 
 def test_every_rule_has_golden_coverage():
@@ -85,6 +87,13 @@ def test_all_detection_patterns_compile():
             re.compile(pat)  # raises re.error if invalid
 
 
+def test_all_rule_prompts_are_format_safe():
+    """Every rule prompt must survive str.format(code_snippet=, file_path=) — no stray { } braces."""
+    for rule in _all_rules():
+        prompt = _load(rule).get("prompt", "")
+        prompt.format(code_snippet="X", file_path="Y")  # raises KeyError/ValueError on stray braces
+
+
 def test_fragment_injection_matches_both_java_and_smali():
     """Regression for the v1.2.0 [B] fix: this rule was Smali-only and dead in hybrid mode."""
     rx = re.compile(_load("fragment_injection")["detection_pattern"])
@@ -96,7 +105,60 @@ def test_fragment_injection_matches_both_java_and_smali():
     ("fragment_injection", "public class X extends Activity {"),
     ("sql_injection", "int total = a + b;"),
     ("insecure_random_number_generation", "int x = getRandomFromSecureSource();"),
+    # v1.3.0 [D]: path_traversal no longer matches openFileOutput coincidentally
+    ("path_traversal", 'openFileOutput("public.txt", MODE_PRIVATE);'),
+    # v1.3.0 [D]: graphql no longer matches any "query = ..." assignment
+    ("graphql_injection", 'String query = "SELECT * FROM users WHERE id=" + id;'),
 ])
 def test_negative_cases_do_not_match(rule, benign):
     rx = re.compile(_load(rule)["detection_pattern"])
     assert not rx.search(benign), f"'{rule}' pattern should NOT match benign code: {benign!r}"
+
+
+def test_path_traversal_matches_real_read_signal():
+    """v1.3.0 [D]: path_traversal must match the real signal (FileInputStream/ContentProvider openFile)."""
+    rx = re.compile(_load("path_traversal")["detection_pattern"])
+    assert rx.search("FileInputStream in = new FileInputStream(new File(dir, name));")
+    assert rx.search("public ParcelFileDescriptor openFile(Uri uri, String mode) {")
+
+
+def test_insecure_file_permissions_covers_setreadable():
+    """v1.3.0 T2.2a: baseline gap — app uses File.setReadable(true, false), not MODE_WORLD_* constants."""
+    rx = re.compile(_load("insecure_file_permissions")["detection_pattern"])
+    assert rx.search("file.setReadable(true, false);")   # world-readable -> must match
+    assert rx.search("f.setWritable(true, false)")       # world-writable -> must match
+    assert not rx.search("file.setReadable(true, true);")  # owner-only -> safe, must NOT match
+    assert not rx.search("file.setReadable(true);")        # single-arg -> safe, must NOT match
+
+
+def test_pending_intent_matches_inlined_flag_mutable():
+    """v2 Layer-2 finding: JADX inlines PendingIntent.FLAG_MUTABLE to its int value
+    33554432, so the literal-only pattern missed PendingIntentActivity. The pattern must
+    match both the named constant and the decompiled integer form."""
+    rx = re.compile(_load("pending_intent_hijacking")["detection_pattern"], re.IGNORECASE | re.DOTALL)
+    assert rx.search("PendingIntent pending = PendingIntent.getActivity(this, 0, baseIntent, 33554432);")
+    assert rx.search("PendingIntent.getActivity(ctx, 0, i, PendingIntent.FLAG_MUTABLE);")
+    # a non-mutable PendingIntent (immutable flag 67108864) must NOT match
+    assert not rx.search("PendingIntent.getActivity(ctx, 0, i, 67108864);")
+
+
+def test_universal_logic_flaw_has_no_pattern():
+    """v1.3.0 T3.4a: LLM-exclusive rule must have NO detection_pattern so gating never skips it."""
+    assert not _load("universal_logic_flaw").get("detection_pattern")
+
+
+# v1.3.0 T2.2: rules whose patterns were made dual-language must also match Smali (apktool mode).
+SMALI_POSITIVE = {
+    "unsafe_reflection": "invoke-static {v0}, Ljava/lang/Class;->forName(Ljava/lang/String;)Ljava/lang/Class;",
+    "insecure_deserialization": "invoke-virtual {p0}, Ljava/io/ObjectInputStream;->readObject()Ljava/lang/Object;",
+    "pending_intent_hijacking": "Landroid/app/PendingIntent;->getActivity(...) sget Landroid/app/PendingIntent;->FLAG_MUTABLE:I",
+    "zip_slip": "invoke-virtual {v1}, Ljava/util/zip/ZipEntry;->getName()Ljava/lang/String;",
+}
+
+
+@pytest.mark.parametrize("rule", sorted(SMALI_POSITIVE))
+def test_detection_pattern_matches_smali_too(rule):
+    rx = re.compile(_load(rule)["detection_pattern"])
+    assert rx.search(SMALI_POSITIVE[rule]), f"'{rule}' should also match its Smali form (apktool mode)"
+    # and still match Java (regression)
+    assert rx.search(POSITIVE[rule]), f"'{rule}' must still match its Java form"

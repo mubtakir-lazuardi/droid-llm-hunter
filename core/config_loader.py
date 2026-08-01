@@ -22,7 +22,19 @@ class LLMSettings(BaseModel):
     # OpenRouter
     openrouter_model: Optional[str] = None
     openrouter_api_key: Optional[str] = None
+    # 9Router (self-hosted, OpenAI-compatible multi-provider router; field prefix is
+    # "router9" because Python/Pydantic identifiers can't start with a digit)
+    router9_model: Optional[str] = None
+    router9_api_key: Optional[str] = None
+    router9_base_url: Optional[str] = "http://localhost:20128/v1/chat/completions"
     max_tokens: int = 4096  # [#6] Max output tokens per LLM call (avoid truncated JSON/exploit)
+    # [v1.3.0] Route --generate-exploit to a DIFFERENT provider/model than scanning.
+    # Some models refuse or silently return empty output for exploit/PoC generation
+    # even with authorized-assessment framing in the prompt, while being fine for
+    # vulnerability analysis. Both optional; unset means "use the main `provider`/its
+    # own default model", so this is fully opt-in and backward compatible.
+    exploit_provider: Optional[str] = None   # e.g. "anthropic" — reuses that provider's own api_key/model fields above
+    exploit_model: Optional[str] = None      # optional model override on exploit_provider (or on `provider`, if exploit_provider is unset)
 
 class ApktoolSettings(BaseModel):
     path: Optional[str] = None
@@ -58,6 +70,7 @@ class RulesSettings(BaseModel):
     insecure_random_number_generation: bool
     insecure_storage: bool
     insecure_webview: bool
+    intent_redirection: bool
     intent_spoofing: bool
     jetpack_compose_security: bool
     path_traversal: bool

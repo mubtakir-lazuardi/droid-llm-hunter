@@ -4,6 +4,7 @@ on:
   push:
     branches: ["master", "main"]
   pull_request:
+  workflow_dispatch:   # manual trigger for the paid Layer-2 job
 
 jobs:
   test:
@@ -24,6 +25,36 @@ jobs:
         # Layer-1 golden tests: detection-pattern coverage, engine pure functions,
         # and config invariants. No LLM / network required.
         run: pytest -q
+
+  semantic-test:
+    name: Golden Test Layer 2 (LLM — paid, opt-in)
+    runs-on: ubuntu-latest
+    # NEVER runs on a normal push/PR. Only via manual "Run workflow" (workflow_dispatch)
+    # or a pull request explicitly labeled `semantic-test`. This keeps LLM costs opt-in.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'semantic-test'))
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run Layer 2 semantic golden test
+        # Prerequisites to actually execute (otherwise the harness SKIPS if the APK is absent):
+        #   - VulnerAppDLH.apk present at repo root (it is .gitignored — provide as a CI artifact/fixture)
+        #   - apktool + jadx installed on the runner
+        #   - a provider + key configured in config/settings.yaml (e.g. via scripts/ci/configurator.py
+        #     reading the OPENROUTER_API_KEY secret below)
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: pytest -m llm -q
 
   build-and-verify:
     name: Build & Sanity Check

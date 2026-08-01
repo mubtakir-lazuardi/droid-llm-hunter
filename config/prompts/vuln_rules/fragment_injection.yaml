@@ -10,7 +10,7 @@ prompt: |
   - This allows attackers to load arbitrary fragments via `Intent.EXTRA_SHOW_FRAGMENT` (`:android:show_fragment`).
   
   Code to Analyze:
-  ```java
+  ```
   {code_snippet}
   ```
   

@@ -1,4 +1,4 @@
-Summarize the functionality of the following smali code snippet in a single sentence.
+Summarize the functionality of the following decompiled Android code (Java or Smali) in a single sentence.
 Focus on the high-level purpose AND explicitly highlight operations related to OWASP MASVS categories:
 1. MASVS-STORAGE: File I/O, SharedPreferences, Database (SQL/Room).
 2. MASVS-CRYPTO: Encryption, Decryption, Hashing, Key Management.
@@ -9,6 +9,6 @@ Focus on the high-level purpose AND explicitly highlight operations related to O
 7. MASVS-PRIVACY: Accessing Contacts, Location, Camera, or PII.
 
 Code:
-```smali
+```
 {code_snippet}
 ```

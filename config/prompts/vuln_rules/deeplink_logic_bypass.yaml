@@ -10,7 +10,7 @@ prompt: |
   - Open Redirects: `intent.setData(Uri.parse(param))` or `webview.loadUrl(param)` without host validation.
   
   Code to Analyze:
-  ```java
+  ```
   {code_snippet}
   ```
   

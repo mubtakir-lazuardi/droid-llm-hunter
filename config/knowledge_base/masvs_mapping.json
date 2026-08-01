@@ -118,5 +118,10 @@
         "masvs_id": "MASVS-STORAGE-2",
         "description": "The app prevents leakage of sensitive data. Ensure no sensitive data is stored in resource files like strings.xml.",
         "reference": "https://mas.owasp.org/MASVS/controls/MASVS-STORAGE-2/"
+    },
+    "intent_redirection": {
+        "masvs_id": "MASVS-PLATFORM-1",
+        "description": "The app uses IPC mechanisms securely. Do not forward Intents received from untrusted callers without validating the target; a mutable/nested Intent enables confused-deputy attacks against non-exported components.",
+        "reference": "https://mas.owasp.org/MASVS/controls/MASVS-PLATFORM-1/"
     }
 }
