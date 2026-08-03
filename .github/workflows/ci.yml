@@ -51,10 +51,13 @@ jobs:
         #   - VulnerAppDLH.apk present at repo root (it is .gitignored — provide as a CI artifact/fixture)
         #   - apktool + jadx installed on the runner
         #   - a provider + key configured in config/settings.yaml (e.g. via scripts/ci/configurator.py
-        #     reading the OPENROUTER_API_KEY secret below)
+        #     using INPUT_PROVIDER and INPUT_API_KEY from env below)
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: pytest -m llm -q
+          INPUT_PROVIDER: openrouter
+          INPUT_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          python scripts/ci/configurator.py
+          pytest -m llm -q
 
   build-and-verify:
     name: Build & Sanity Check
