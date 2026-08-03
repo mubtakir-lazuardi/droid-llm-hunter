@@ -23,7 +23,7 @@ Features **Auto-Exploit Generation**, transforming from a passive scanner into a
 
 <p align="center">
   <img src="https://img.shields.io/badge/Security-Android-green" />
-  <img src="https://img.shields.io/badge/Drodi LLM Hunter-DLH-red" />
+  <img src="https://img.shields.io/badge/Droid LLM Hunter-DLH-red" />
   <img src="https://img.shields.io/badge/version-1.3.0-cyan" />
 </p>
 
@@ -147,7 +147,7 @@ Multi-stage pipeline: **Decompilation → Scope Filter → Risk Identification �
 |---------|---------|-------------|
 | `filter_mode` | `llm_only`, `static_only`, `hybrid` | `hybrid` |
 | `decompiler_mode` | `apktool`, `jadx`, `hybrid` | `hybrid` |
-| `provider` | `ollama`, `gemini`, `groq`, `openai`, `anthropic`, `openrouter`, `9router` | `anthropic` |
+| `provider` | `ollama`, `gemini`, `groq`, `openai`, `anthropic`, `openrouter`, `router9` | `anthropic` |
 
 → **[View Full Configuration Guide](document/CONFIGURATION.md)**
 

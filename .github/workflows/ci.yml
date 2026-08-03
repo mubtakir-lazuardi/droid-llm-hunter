@@ -48,7 +48,7 @@ jobs:
 
       - name: Run Layer 2 semantic golden test
         # Prerequisites to actually execute (otherwise the harness SKIPS if the APK is absent):
-        #   - VulnerAppDLH.apk present at repo root (it is .gitignored — provide as a CI artifact/fixture)
+        #   - VulnerAppDLHv2.apk present at repo root (it is .gitignored — provide as a CI artifact/fixture)
         #   - apktool + jadx installed on the runner
         #   - a provider + key configured in config/settings.yaml (e.g. via scripts/ci/configurator.py
         #     using INPUT_PROVIDER and INPUT_API_KEY from env below)

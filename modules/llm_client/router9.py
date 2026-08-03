@@ -50,29 +50,31 @@ class Router9Client(BaseLLMClient):
 
         for attempt in range(max_retries):
             try:
-                response = requests.post(
-                    self.url, headers=headers, data=json.dumps(data),
-                    timeout=120, stream=True,
-                )
+                with requests.post(
+                    self.url,
+                    headers=headers,
+                    json=data,
+                    timeout=120,
+                    stream=True,
+                ) as response:
 
-                if response.status_code == 429:
-                    log.warning(f"Rate limit hit (429). Retrying... (Attempt {attempt + 1})")
-                    time.sleep(base_delay * (2 ** attempt))
-                    continue
+                    if response.status_code == 429:
+                        log.warning(f"Rate limit hit (429). Retrying... (Attempt {attempt + 1})")
+                        time.sleep(base_delay * (2 ** attempt))
+                        continue
 
-                response.raise_for_status()
+                    response.raise_for_status()
 
-                content_type = response.headers.get("Content-Type", "")
-                if "text/event-stream" in content_type:
-                    content = self._parse_sse_stream(response)
-                else:
-                    result = response.json()
-                    if "error" in result:
-                        log.error(f"9Router API returned error: {result['error']}")
-                        raise requests.exceptions.RequestException(f"9Router API Error: {result['error']}")
-                    choices = result.get("choices") or []
-                    content = choices[0]["message"]["content"] if choices else ""
-
+                    content_type = response.headers.get("Content-Type", "")
+                    if "text/event-stream" in content_type:
+                        content = self._parse_sse_stream(response)
+                    else:
+                        result = response.json()
+                        if "error" in result:
+                            log.error(f"9Router API returned error: {result['error']}")
+                            raise requests.exceptions.RequestException(f"9Router API Error: {result['error']}")
+                        choices = result.get("choices") or []
+                        content = choices[0]["message"]["content"] if choices else ""
                 if content:
                     log.success("Received analysis from 9Router.")
                 return content
