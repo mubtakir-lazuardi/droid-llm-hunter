@@ -1,18 +1,23 @@
 name: "WebView via DeepLink"
 description: "Detects potential WebView vulnerabilities exposed via deep links."
 prompt: |
-  Analyze the following AndroidManifest.xml snippet for vulnerabilities related to deep links and WebViews.
-  Specifically, look for <intent-filter> tags with an <action android:name="android.intent.action.VIEW" /> that open an activity containing a WebView.
-  If you find such a deep link, check if the corresponding activity validates the URL loaded into the WebView.
-  A vulnerability exists if the WebView loads a URL from an intent without proper validation, which could lead to XSS or other attacks.
+  Analyze the following AndroidManifest.xml for a deep link that can drive a WebView.
+
+  Vulnerability pattern:
+  - An `<activity>` has an `<intent-filter>` with `android.intent.action.VIEW` + `BROWSABLE` and a
+    `<data android:scheme=.../>` (a deep link), AND that activity hosts a WebView.
+  - If the activity loads a URL taken from the incoming Intent (`getIntent().getData()`, a query
+    parameter, etc.) into `webView.loadUrl(...)` WITHOUT validating scheme/host against an allowlist,
+    an attacker can drive the WebView to arbitrary content (open redirect / XSS / phishing).
+
+  Recommend validating scheme + host before loading, and disabling unneeded WebView features.
 
   AndroidManifest.xml:
   ```xml
   {code_snippet}
   ```
 
-  Context:
-  - File Path: {file_path}
+  Context: file = {file_path}
 
   Is there a WebView via DeepLink vulnerability in this manifest? If yes, explain the risk and provide a recommendation.
 tags: ["manifest", "deeplink", "webview"]

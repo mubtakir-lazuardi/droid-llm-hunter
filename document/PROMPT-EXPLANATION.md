@@ -17,8 +17,9 @@ Defines the core "Identity" of the AI. This file sets the standards and rules th
 **Key Roles:**
 *   Establishes the role as a "World-Class Android Security Tester".
 *   Enforces output in valid JSON format.
-*   **[NEW]** Mandates analysis based on **OWASP MASVS** principles.
-*   **[NEW]** Serves as the entry point for "Context Injection" (where specific MASVS rule definitions are dynamically injected by the Engine at runtime).
+*   Mandates analysis based on **OWASP MASVS** principles.
+*   Serves as the entry point for "Context Injection" (where specific MASVS rule definitions are dynamically injected by the Engine at runtime).
+*   **[v1.3.0]** The Engine also appends a strict `JSON_ONLY_SUFFIX` after every rule prompt as the *final* instruction — reinforcing "JSON object only, no prose/markdown" to override any prose-inviting wording. Non-empty-but-unparseable replies are marked `status: "Error"`, never silently treated as clean.
 
 ### 2. `summarize_prompt.txt` (Phase 1: The Signal Seeker)
 **Location:** `config/prompts/summarize_prompt.txt`
@@ -38,15 +39,17 @@ Acts as an intelligent filter. The AI reads the *summaries* (from Phase 1) and d
 *   If the summary contains MASVS keywords -> Risk = **YES**.
 *   If the summary only contains common UI/Utility code -> Risk = **NO**.
 *   **Token Efficiency:** Prevents irrelevant files from entering the expensive Phase 3.
+*   **[v1.3.0] Recall safeguard:** a coarse "NO" here cannot hide a strong static signal — first-party files whose content matches an enabled rule's `detection_pattern` are deep-scanned anyway (`Engine._pattern_matched_files`). So this gate only ever *adds* scan candidates on top of the pattern hits, it never removes one.
 
 ### 4. `app_summary_prompt.txt` (Reporting: The Big Picture)
 **Location:** `config/prompts/app_summary_prompt.txt`
 **Function:** 
-Used at the end of the scan process to generate the opening paragraph of the final report (Executive Summary).
+Used at the end of the scan process to generate the opening paragraph of the final report (Executive Summary). This field is **report-only** — it is not re-injected as context into any other prompt.
 **Key Roles:**
 *   Reads `AndroidManifest.xml` (Permissions, Activities).
 *   Reads code summaries found during analysis.
-*   **[NEW]** Generates an application description focusing on: Core Functionality, Security Features, Data Handling, and Dangerous Permissions.
+*   Generates an application description focusing on: Core Functionality, Security Features, Data Handling, and Dangerous Permissions.
+*   **[v1.3.0]** Rewritten for information density: a ~120-180 word bullet-point summary, not a comprehensive essay. Prioritizes the **exported attack surface** (the most report-relevant section), states dangerous permissions actually present instead of enumerating absent ones, and forbids markdown tables/headers and closing disclaimers. Cut real-world output from ~1000-1600 tokens to ~360 tokens with no loss of security-relevant content (verified live against VulnerAppDLHv2).
 
 ### 5. `attack_surface_prompt.txt` (Reporting: The Map Maker)
 **Location:** `config/prompts/attack_surface_prompt.txt`
@@ -55,7 +58,20 @@ Used if the `generate_attack_surface_map` option is enabled. Its task is to map 
 **Key Roles:**
 *   Analyzes components where `exported=true` (Activity, Receiver, Service).
 *   Identifies Deep Link URLs that can be triggered externally.
-*   **Output:** Used by pentesters to identify initial attack vectors.
+*   **Output:** a compact **structured JSON inventory** (`report["attack_surface_map"]`), not a narrative report.
+*   **[v1.3.0]** Rewritten from a free-text "generate an attack surface map" essay to a strict JSON-inventory spec: `exported_activities`/`exported_receivers`/`exported_services`/`exported_providers` (short class names), `deep_links` (scheme/host/handler triples), `unprotected_broadcasts`, `network`/`file_io`/`ipc`/`deserialization`/`reflection` signals, and `manifest_flags`. No prose, no per-item impact commentary (that's already covered by the per-file vulnerability findings). `Engine.generate_attack_surface_map` now parses the response into a real dict (reusing `_parse_llm_response`) instead of storing raw LLM text; on failure it returns `{"error": ...}` instead of silently returning nothing. Cut real-world output from ~16,000 chars (~4000 tokens) of markdown to ~900 chars (~230 tokens) on VulnerAppDLHv2, with no loss of the underlying facts — a downstream report renderer (e.g. an HTML dashboard) is expected to turn this data into bullets/tables itself.
+
+### 6. `vuln_rules/*.yaml` (Phase 3: The Detectors)
+**Location:** `config/prompts/vuln_rules/*.yaml`
+**Function:**
+One file per vulnerability rule. Each supplies the `prompt` shown to the LLM during Deep Analysis, plus an optional `detection_pattern` (regex) and `keywords` used by the static filter to decide whether the rule even runs (per-rule gating).
+**Key Roles:**
+*   **[v1.3.0] Consistent template:** every rule follows *Vulnerability pattern → Tainted source → "not a finding if…"*, so the model reasons about attacker-controllability, not just keyword presence.
+*   **[v1.3.0] Language-agnostic:** prompts say "decompiled Android code (Java or Smali)" with a neutral ```` ``` ```` code fence — no per-file `smali→java` string patching anymore.
+*   **[v1.3.0] Per-rule gating:** in `hybrid`/`static_only` modes a rule's LLM call is skipped when its `detection_pattern` doesn't match the file (huge token saving). Pattern-less rules (e.g. `universal_logic_flaw`, deliberately LLM-exclusive) always run on risky files.
+*   **Manifest rules** (`exported_components`, `intent_spoofing`, `deeplink_hijack`, `webview_deeplink`, `strandhogg`) run only against `AndroidManifest.xml`, never the code scan (single-source `MANIFEST_RULES`).
+*   **[v1.3.0] 26 toggleable rules** (A–Z in `RulesSettings`), including the new `intent_redirection` (confused-deputy IPC). A separate `library_vulnerability` supply-chain detector runs only under `--scan-libraries`.
+*   **Output:** the structured JSON defined by the system prompt; overlapping findings on the same file are later collapsed via report de-duplication (`also_detected_by`).
 
 ---
 

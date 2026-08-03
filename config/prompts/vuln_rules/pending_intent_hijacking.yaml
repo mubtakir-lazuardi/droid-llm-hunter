@@ -9,7 +9,7 @@ prompt: |
   - IMPORTANT: In modern Android, checking for `FLAG_MUTABLE` or absence of `FLAG_IMMUTABLE` is critical.
   
   Code to Analyze:
-  ```java
+  ```
   {code_snippet}
   ```
   
@@ -26,5 +26,5 @@ keywords:
   - "FLAG_MUTABLE"
   - "getActivity"
   - "getService"
-detection_pattern: "PendingIntent\\.(getActivity|getService|getBroadcast).*FLAG_MUTABLE"
+detection_pattern: "PendingIntent(?:\\.|;->)(getActivity|getService|getBroadcast).*(FLAG_MUTABLE|33554432)"
 tags: ["intents", "privilege_escalation", "pending_intent"]

@@ -1,29 +1,40 @@
 name: "Conceptual Logic Flaw Detection"
 description: "Detects sophisticated logic flaws in Android Internals (IPC/Reflection) and Business Logic (Financial/Auth)."
 prompt: |
-  You are an Advanced Android Security Researcher specializing in LOGIC FLAWS.
-  
-  Analyze the following code snippet for subtle CONCEPTUAL Vulnerabilities in:
-  1. **Low-Level Android:** IPC (`Parcel`, `Serializable`, `Intent`), Reflection (`Method.invoke`), Deep Link handling.
-  2. **High-Level Business Logic:** Payment bypasses, Admin privilege escalation, Transaction manipulation.
+  You are an Advanced Android Security Researcher specializing in CONCEPTUAL LOGIC FLAWS —
+  the kind that no signature/keyword rule can catch. Focus ONLY on flawed trust and control flow.
 
-  **Devil's Advocate Questions (Challenge the Code):**
-  - **Logic Bypass:** Can I manipulate inputs to skip the critical `if (securityCheck)` block? (Race Conditions).
-  - **Deserialization:** Does it accept `Serializable`/`Parcelable` from an external Intent? (Object Injection risk).
-  - **Reflection:** Is `Method.invoke` or `Class.forName` used with user-controlled strings? (RCE Risk).
-  - **Financial Logic:** Can I send a negative number to a payment function? Is the "Amount" trusted from client input?
-  
+  IN SCOPE (report these):
+  - Client-side trust of a security decision: an `isVip` / `isAdmin` / `isPaid` / `isAuthenticated`
+    boolean or role flag that the client can flip, or that gates access with no server-side verification.
+  - Authentication / biometric bypass via control flow: the auth result is ignored, hard-coded, or
+    overridden (e.g. `if (success || true)`, or "success" set outside the real auth callback).
+  - IPC / Intent trust: an exported component performs a sensitive action from incoming Intent data
+    (`getStringExtra`, deep-link params) with no caller identity / permission check.
+  - Business-logic bypass: negative/overflow amounts, price/quantity/role trusted from the client,
+    or a race condition / order-of-operations flaw around a critical check.
+
+  OUT OF SCOPE — do NOT report these here (dedicated rules already own them):
+  - SQL or GraphQL injection, hardcoded secrets, insecure storage / file permissions, path traversal,
+    standard WebView misconfiguration, insecure deserialization, unsafe reflection.
+  - If the ONLY problem in the snippet is one of the above, set is_vulnerable=false for THIS rule
+    (another rule will report it). Only flag a genuine trust/logic flaw as defined above.
+
   Code to Analyze:
-  ```java
+  ```
   {code_snippet}
   ```
 
   Context:
   - File: {file_path}
 
-  If you find a Logic Flaw, explain the "Kill Chain" (How to trigger it). If the code is robust, say "Safe".
+  Set is_vulnerable=true ONLY for a genuine conceptual / trust / business-logic flaw; describe the
+  kill chain in the JSON fields. Otherwise set is_vulnerable=false.
 tags: ["logic_flaw", "ipc", "reflection", "business_logic", "serialization"]
-detection_pattern: "(Parcel|Serializable|Method\\.invoke|Class\\.forName|payment|admin|transfer|balance|shouldOverrideUrlLoading)"
+# [v1.3.0 T3.4a] NO detection_pattern on purpose: this rule is LLM-EXCLUSIVE / conceptual
+# (per VULNER_DLH.md). A narrow pattern made per-rule gating (#1) skip real logic flaws
+# like CryptoActivity's isVip/||true (baseline recall gap). With no pattern it runs on every
+# risky file that survived the global scope/keyword filter — its intended design.
 keywords:
   - "Parcel"
   - "Serializable"

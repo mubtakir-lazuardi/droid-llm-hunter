@@ -1,12 +1,14 @@
 name: "Insecure File Permissions"
 description: "Detects files created with world-readable or world-writable permissions."
 prompt: |
-  Analyze the following smali code snippet for insecure file permissions.
-  Specifically, look for `openFileOutput` calls where the mode is `MODE_WORLD_READABLE` or `MODE_WORLD_WRITABLE`.
-  These modes are deprecated and can lead to security vulnerabilities.
+  Analyze the following decompiled Android code (Java or Smali) for insecure file permissions.
+  Specifically, look for:
+  - `openFileOutput` calls where the mode is `MODE_WORLD_READABLE` / `MODE_WORLD_WRITABLE` (or the raw int `1`/`2`).
+  - `File.setReadable(true, false)` or `File.setWritable(true, false)` — the second arg `false` means "not owner-only", i.e. readable/writable by ALL apps.
+  These make the file accessible to other apps on the device and can leak sensitive data.
 
   Code:
-  ```smali
+  ```
   {code_snippet}
   ```
 
@@ -15,4 +17,4 @@ prompt: |
 
   Is there an insecure file permission vulnerability in this code? If yes, explain the risk and suggest a remediation.
 tags: ["storage", "permission", "file"]
-detection_pattern: "MODE_WORLD_READABLE|MODE_WORLD_WRITABLE"
+detection_pattern: "MODE_WORLD_READABLE|MODE_WORLD_WRITABLE|set(Readable|Writable)\\s*\\(\\s*true\\s*,\\s*false"

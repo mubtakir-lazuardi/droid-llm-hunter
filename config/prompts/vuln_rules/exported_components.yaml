@@ -1,17 +1,21 @@
 name: "Exported Components without Permissions"
 description: "Detects exported components that are not protected by a permission."
 prompt: |
-  Analyze the following AndroidManifest.xml snippet for exported components (activities, services, receivers, providers) that are not protected by a permission.
-  An exported component without a permission can be accessed by any application on the device, which could lead to unauthorized access or denial of service.
+  Analyze the following AndroidManifest.xml for components exposed to other apps.
+
+  Vulnerability pattern:
+  - An `<activity>`, `<service>`, `<receiver>`, or `<provider>` has `android:exported="true"`
+    (or is implicitly exported via an `<intent-filter>`) AND has NO `android:permission` guard.
+  - Any app on the device can then invoke it → unauthorized access, intent injection, or DoS.
+
+  Not a finding: the LAUNCHER activity (MAIN/LAUNCHER) is expected to be exported; components
+  guarded by a signature-level `android:permission` are acceptable.
 
   AndroidManifest.xml:
   ```xml
   {code_snippet}
   ```
 
-  Context:
-  - File Path: {file_path}
-
-  Are there any exported components without a permission in this manifest? If yes, list them and explain the risk.
+  Context: file = {file_path}
 tags: ["manifest", "exported", "permission"]
 detection_pattern: "android:exported=[\"']true[\"']"

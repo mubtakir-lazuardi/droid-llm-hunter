@@ -1,0 +1,37 @@
+name: "Intent Redirection"
+description: "Detects confused-deputy Intent redirection where an exported component forwards an attacker-supplied nested Intent without validation."
+prompt: |
+  Analyze the following decompiled Android code (Java or Smali) for an Intent Redirection (confused deputy) vulnerability.
+
+  Vulnerability pattern:
+  - An exported component extracts a NESTED Intent from an untrusted caller, e.g.
+    `Intent forward = intent.getParcelableExtra("...")` (or a Bundle `getParcelable`).
+  - It then forwards that Intent to a sink WITHOUT validating its target/component:
+    `startActivity(forward)`, `startActivityForResult(...)`, `startService(...)`, or `sendBroadcast(...)`.
+  - Because the forward runs with THIS app's identity, an attacker can reach the app's
+    non-exported components or relay granted URI permissions (READ/WRITE_URI_PERMISSION).
+
+  Tainted source: the nested Intent comes from `getIntent()` / a received Intent extra
+  (`getParcelableExtra` / `getParcelable`) — i.e. it is controlled by the calling app.
+
+  NOT a finding if:
+  - The forwarded Intent is built internally (explicit component/class set by this app), not taken from an extra.
+  - The target is validated against an allowlist, the component/package is explicitly set to a trusted value,
+    or the caller's identity is checked before forwarding.
+  - The receiving component is not exported and cannot be reached by other apps.
+
+  Code to Analyze:
+  ```
+  {code_snippet}
+  ```
+
+  Context:
+  - File Path: {file_path}
+keywords:
+  - "getParcelableExtra"
+  - "startActivity"
+  - "startService"
+  - "sendBroadcast"
+  - "EXTRA_INTENT"
+tags: ["intents", "ipc", "redirection", "confused_deputy", "privilege_escalation"]
+detection_pattern: "getParcelableExtra\\s*[(<]"

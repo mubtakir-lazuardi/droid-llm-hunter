@@ -10,7 +10,7 @@ prompt: |
   - Pattern: `String cls = intent.getStringExtra("class"); Class.forName(cls);`
   
   Code to Analyze:
-  ```java
+  ```
   {code_snippet}
   ```
   
@@ -28,4 +28,4 @@ keywords:
   - "ClassLoader"
   - "getStringExtra"
 tags: ["reflection", "rce", "code_execution"]
-detection_pattern: "(?i)(Class\\.forName|Method\\.invoke|ClassLoader\\.loadClass)"
+detection_pattern: "(?i)(Class(?:\\.|;->)forName|Method(?:\\.|;->)invoke|ClassLoader(?:\\.|;->)loadClass)"

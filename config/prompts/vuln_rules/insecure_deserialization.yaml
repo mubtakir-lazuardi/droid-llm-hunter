@@ -9,7 +9,7 @@ prompt: |
   - If the class being deserialized is not validated (e.g., look-ahead deserialization), it can lead to RCE.
   
   Code to Analyze:
-  ```java
+  ```
   {code_snippet}
   ```
   
@@ -25,5 +25,5 @@ keywords:
   - "ObjectInputStream"
   - "readObject"
   - "getSerializableExtra"
-detection_pattern: "ObjectInputStream.*\\.readObject"
+detection_pattern: "ObjectInputStream.*(?:\\.|->)readObject"
 tags: ["deserialization", "rce", "serializable"]

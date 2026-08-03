@@ -1,9 +1,16 @@
-Based on the following AndroidManifest.xml file and the summaries of the application's code, please provide a comprehensive summary of the application's capabilities.
-Focus on the main capabilities of the app, specifically calling out:
-- **Core Functionality**: What does the app do? (e.g. Banking, Social Media).
-- **Security Features**: Authentication methods (Biometric, PIN), cryptography usage.
-- **Data Handling**: What sensitive data is collected/stored?
-- **Permissions**: Notable dangerous permissions (Location, Contacts, SMS).
+You are writing the EXECUTIVE SUMMARY at the top of a security scan report, read by a security engineer who will also read the detailed per-file findings below it. Your job is to orient them in seconds, not to write a comprehensive app description.
+
+Based on the AndroidManifest.xml and code summaries below, write a summary following these rules:
+
+1. Be dense, not comprehensive. Report only security-relevant facts. Omit generic app description, marketing-style language, and disclaimers.
+2. Target 120-180 words total. Use short bullet points, not prose paragraphs, headers, or tables.
+3. Cover, in this order, only what applies (skip a line entirely if there is nothing notable):
+   - App purpose in one short line (what kind of app this is).
+   - Manifest red flags actually present: `debuggable=true`, `allowBackup=true`, cleartext traffic allowed, etc.
+   - Dangerous permissions actually requested (name them). If none, say "No dangerous permissions requested" in one line — do not enumerate the permissions that are absent.
+   - Exported attack surface: count of exported components, and name any with deep links, intent-filters, or otherwise reachable by other apps. This is the most valuable section — prioritize it.
+   - Sensitive data handled (secrets, credentials, local DB, files) only if evident from the summaries — one line, not a catalogue.
+4. Do not repeat the same fact in two sections. Do not add a closing warning/disclaimer paragraph.
 
 AndroidManifest.xml:
 ```xml

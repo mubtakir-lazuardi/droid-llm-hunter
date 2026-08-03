@@ -29,7 +29,7 @@ This acts as a "Coarse Sieve" running **locally** using **Regex (Regular Express
 *   **Cost:** FREE (0 Tokens).
 *   **Speed:** Blazing Fast (< 1 second).
 *   **Examples:**
-    *   **PendingIntent:** Doesn't just find `PendingIntent`, but looks for the pattern: `PendingIntent` + (`getActivity` OR `getService`) + `FLAG_MUTABLE`.
+    *   **PendingIntent:** Doesn't just find `PendingIntent`, but looks for the pattern: `PendingIntent` + (`getActivity` OR `getService`) + `FLAG_MUTABLE` (or its decompiled integer value `33554432`, since JADX inlines the constant).
     *   **ZipSlip:** Doesn't just find `ZipEntry`, but looks for `ZipEntry` + `.getName`.
 
 If the specific regex pattern is **NOT** found, the file is immediately discarded. The LLM is never invoked.
@@ -42,6 +42,12 @@ This acts as the "Judge", analyzing only the files that survived Stage 1.
 *   **Example:**
     *   *Engine* flags a file for ZipSlip pattern.
     *   *LLM* is asked: "I see `ZipEntry.getName` here. Is there a `getCanonicalPath` check preceding it?"
+
+### Stage 2.5: "Recall Safeguard" — static hits are never silently dropped
+
+In `hybrid` mode a lightweight LLM **risk-triage** (`identify_risk_prompt.txt`) reads each file's *summary* and votes *risky / not risky* before the deep scan, to save tokens. Because that vote is a coarse LLM judgment, it can occasionally drop a genuinely vulnerable file. To protect recall, **any first-party file whose content matches an enabled rule's `detection_pattern` is deep-scanned regardless of the triage vote** (`Engine._pattern_matched_files`). A static pattern hit is a strong signal, so it must reach rule gating + the rule LLM — it is never discarded by the triage. This is scoped to the app package, so library files still go through the normal triage and the added cost stays bounded to first-party code.
+
+> This safeguard was added after the Layer-2 testbed caught the triage dropping `ZipSlipActivity` even though the `zip_slip` pattern matched it.
 
 ### Stage 3: "Specialized Pipelines" (Resource Files 📄)
 Some rules target **configuration files** (XML) rather than source code. These bypass the Regex Filter and use dedicated parsers:
@@ -93,7 +99,7 @@ This turns an interrupted scan (crash, rate limit) into a **free resume** — re
     *   Vulnerability rules now support a new field: `detection_pattern`.
     *   Example from `pending_intent_hijacking.yaml`:
         ```yaml
-        detection_pattern: "PendingIntent\\.(getActivity|getService|getBroadcast).*FLAG_MUTABLE"
+        detection_pattern: "PendingIntent(?:\\.|;->)(getActivity|getService|getBroadcast).*(FLAG_MUTABLE|33554432)"
         ```
 
 ---
@@ -132,11 +138,11 @@ Once added, the Engine automatically switches to Hybrid Mode for that rule.
 
 For full transparency, it is important to understand the "Blind Spots" of this Regex-based approach. While it covers 95-99% of standard cases, some edge cases might be missed to preserve performance.
 
-### 1. Hardcoded Secrets (Naming Dependency)
-*   **Pattern:** `(?i)(api_key|password|secret|token).*=.*["']`
-*   **Strength:** Highly efficient, only flags variables that *look* like secrets.
-*   **Weakness:** If a developer uses random variable names (e.g., `String x = "AIza...";`), Regex will NOT catch it.
-*   **Trade-off:** Scanning *every* string assignment would result in millions of false positives and massive token costs. This is a necessary balance.
+### 1. Hardcoded Secrets (Entropy + Naming)
+*   **Pattern:** `(?i)(AIza…|AKIA…|const-string.*(api_key|password|secret|token)|(api_key|password|secret|token).*=.*["'])`
+*   **Strength:** Catches BOTH high-entropy key prefixes (Google `AIza…`, AWS `AKIA…`) *regardless of the variable name*, AND secret-looking variable assignments. (So `String x = "AIza…";` **is** caught via the prefix.)
+*   **Weakness:** A secret with no known prefix stored under a random variable name (e.g. `String x = "9f3c…";`) can still be missed.
+*   **Trade-off:** Flagging *every* string assignment would explode false positives and token cost. This is a necessary balance.
 
 ### 2. SQL Injection (Standard API Dependency)
 *   **Pattern:** `(rawQuery|execSQL)\\s*\\(`
@@ -144,9 +150,11 @@ For full transparency, it is important to understand the "Blind Spots" of this R
 *   **Weakness:** If using obscure 3rd-party ORMs or custom wrapper functions (e.g., `myDatabaseHelper.doQuery(...)`), it might be missed.
 *   **Trade-off:** `rawQuery` accounts for the vast majority of SQLi vulnerabilities in native Android.
 
-### 3. Insecure File Permissions (Constant Dependency)
-*   **Pattern:** `MODE_WORLD_READABLE`
-*   **Weakness:** If a developer uses the integer value (`1`) instead of the constant name, Regex won't know.
-*   **Reality Check:** Developers almost always use the IDE auto-completed constants, making this risk negligible.
+### 3. Insecure File Permissions (Constant + API Dependency)
+*   **Pattern (v1.3.0):** `MODE_WORLD_READABLE|MODE_WORLD_WRITABLE|set(Readable|Writable)\s*\(\s*true\s*,\s*false`
+*   **Improvement (v1.3.0):** now also detects `File.setReadable(true, false)` / `setWritable(true, false)` — a real-world world-accessible pattern the old `MODE_WORLD_*`-only regex missed (VulnerAppDLH used exactly this, so the earlier "negligible" assumption was wrong).
+*   **Remaining weakness:** the raw integer mode (`openFileOutput(f, 1)`) is still not flagged — matching a bare `1` would cause massive false positives. This narrow gap is accepted.
 
 **Conclusion:** The current configuration represents the "Best Practice" sweet spot. Tightening regex increases False Negatives; loosening it explodes Token Costs.
+
+> **v1.3.0 pattern refinements** (validated by the semantic Golden Test so recall did not regress): `path_traversal` now keys on the real read signal `(openFile|FileInputStream|FileOutputStream)\s*\(` instead of a bare `openFile` (which only matched by coincidence); `insecure_file_permissions` gained `setReadable/setWritable(true,false)`; and `universal_logic_flaw` was made **LLM-exclusive** (no `detection_pattern`) so per-rule gating never skips a conceptual flaw. Several method-call patterns are now dual-language (Java `.method` + Smali `;->method`).

@@ -62,6 +62,8 @@ Configure the analysis strategy to balance speed, cost, and accuracy.
 1. **Phase 1 (Static):** Find files with dangerous keywords.
 2. **Phase 2 (LLM Verification):** Only those specific files are summarized and checked by the LLM to confirm if they are truly risky.
 
+> **[v1.3.0] Recall safeguard:** first-party files whose content matches an enabled rule's `detection_pattern` are deep-scanned even if the LLM risk-triage would skip them — a strong static signal is never dropped. See [Architecture](ARCHITECTURE_EXPLANATION.md).
+
 | | |
 |--|--|
 | ✅ **Pros** | Extreme Token Savings (ignores safe files), Good Accuracy |
@@ -102,6 +104,47 @@ Droid LLM Hunter supports dual decompilation to balance reliability and analysis
 - **Result:** Best of both worlds — Analysis quality of Java with the reliability of Smali.
 
 ---
+
+## LLM Providers
+
+Supported `llm.provider` values: `ollama`, `gemini`, `groq`, `openai`, `anthropic`, `openrouter`, `router9`.
+
+### 9Router (`router9`)
+
+[9Router](https://github.com/9router/9router) is a **self-hosted, OpenAI-compatible LLM router**: one local endpoint that fans out to many providers/models via a provider-prefixed model name (e.g. `gc/gemini-2.5-pro` routes through to Gemini). Configure it like any other provider:
+
+```yaml
+llm:
+  provider: router9
+  router9_model: gc/gemini-2.5-pro
+  router9_api_key: sk-...
+  router9_base_url: http://localhost:20128/v1/chat/completions   # your self-hosted instance
+```
+
+- **`router9_base_url` is configurable** (unlike the other clients, which hit a fixed public URL) since 9Router is self-hosted — host/port vary per install.
+- **Streaming quirk:** 9Router's `/v1/chat/completions` endpoint was observed to return a **Server-Sent Events (SSE) stream** (`Content-Type: text/event-stream`, `data: {...}` chunks) even for a plain, non-streaming request. The client (`modules/llm_client/router9.py`) detects this via the response's `Content-Type` header and parses the SSE chunks accordingly, falling back to a normal single-JSON response if the router ever returns one instead.
+- **Reasoning models eat into `max_tokens`:** routing to a reasoning-capable model (e.g. `gemini-2.5-pro`) burns part of the `max_tokens` budget on hidden `reasoning_tokens` before any visible output is produced. A too-low `max_tokens` can silently truncate the answer (`finish_reason: "length"`) — this was confirmed live against a real 9Router instance during testing. If responses look cut off, raise `llm.max_tokens` (same guidance as OpenRouter's `kimi-k3`, which needs `8192`).
+
+### Routing `--generate-exploit` to a different provider (`exploit_provider` / `exploit_model`)
+
+Some models happily analyze code for vulnerabilities but refuse — or silently return empty output — when asked to write a working PoC/verification script, even with authorized-assessment framing in `exploit_prompt.txt`. This was confirmed live: a reasoning model routed through `router9` returned nothing for `intent_redirection`, while Anthropic's `claude-opus-4-6` produced a complete script for the identical finding.
+
+Rather than switching your whole `provider` just for exploit generation, point ONLY that stage at a different (known-permissive) provider/model:
+
+```yaml
+llm:
+  provider: router9              # used for scanning/analysis (summarize, risk-ID, rule verification, ...)
+  router9_model: jem/glm-5.2
+  anthropic_api_key: sk-ant-...   # already present for the `anthropic` provider — reused below, no duplication
+  anthropic_model: claude-opus-4-6
+  exploit_provider: anthropic     # --generate-exploit only: use Anthropic instead of router9
+  # exploit_model: claude-sonnet-4-5-20250929   # optional: override the model on exploit_provider (or on `provider`, if exploit_provider is unset)
+```
+
+- **Both fields are optional and independent.** `exploit_provider` alone switches provider (using that provider's own default model). `exploit_model` alone keeps the same provider but overrides just the model. Neither set → exploit generation uses the main `provider`/model, unchanged from before this feature existed.
+- **No separate API key field** — `exploit_provider: anthropic` reuses `anthropic_api_key`/`anthropic_model` already in this file; there's no `exploit_api_key`.
+- **Safe by design:** the exploit-specific client is only built when `--generate-exploit` is actually requested, so a typo'd `exploit_provider` never breaks a normal scan. If building it fails for any reason, DLH logs a warning and falls back to the main provider/model rather than crashing the whole run.
+- **Cache-friendly:** the response cache is keyed by model, so exploit-gen calls and scan calls never collide even when routed to different providers; the end-of-run `Response cache: N hit(s), M miss(es)` line reports the combined total.
 
 ## JADX Path Configuration
 

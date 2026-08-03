@@ -9,6 +9,7 @@ from modules.llm_client.groq import GroqClient
 from modules.llm_client.openai import OpenAIClient
 from modules.llm_client.anthropic import AnthropicClient
 from modules.llm_client.openrouter import OpenRouterClient
+from modules.llm_client.router9 import Router9Client
 from core.call_graph import CallGraphBuilder
 from core.manifest_parser import ManifestParser
 import os
@@ -19,10 +20,49 @@ import shutil
 from rich.progress import track
 from core.logger import console
 
+# Rules evaluated ONLY against AndroidManifest.xml (in analyze_manifest), never against
+# code files in the deep scan. Single source of truth so the two paths can't drift —
+# a missing entry here previously let `strandhogg` leak into the code deep-scan and
+# false-positive on every risky Java file.
+MANIFEST_RULES = ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack", "strandhogg"]
+
+# Rules that have their OWN dedicated analysis pass and must NEVER run in the generic code
+# deep-scan (analyze_file) — otherwise they leak and false-positive on .java files.
+# Manifest rules run in analyze_manifest; hardcoded_secrets_xml runs in analyze_strings_xml.
+DEDICATED_PASS_RULES = set(MANIFEST_RULES) | {"hardcoded_secrets_xml"}
+
+# [#E report-dedup] Rules that detect the same underlying issue share a "family". On the
+# same file, findings in one family collapse into a single entry; the rest move under
+# 'also_detected_by' (never deleted). Rules not listed are their own singleton family.
+VULN_FAMILIES = {
+    "webview_xss": "webview", "insecure_webview": "webview",
+    "webview_file_access": "webview", "webview_deeplink": "webview",
+    "insecure_storage": "storage", "insecure_file_permissions": "storage",
+    "exported_components": "ipc", "intent_spoofing": "ipc",
+    "deeplink_hijack": "deeplink", "deeplink_logic_bypass": "deeplink",
+}
+# Broad conceptual rule(s): on a file that already has a specific finding, these are folded
+# into it (kept under 'also_detected_by') so they don't flood the report. If a generic rule
+# is the ONLY finding on a file, it stays as a standalone finding.
+GENERIC_RULES = {"universal_logic_flaw"}
+_SEVERITY_ORDER = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+
+# [#C] Appended to every RULE prompt (deep-scan + manifest + strings) as the LAST instruction,
+# so it overrides any prose-inviting wording inside a rule ("explain...", "say Safe"). Reduces
+# parse failures across providers. Brace-free (vuln_prompt is passed through str.format()).
+JSON_ONLY_SUFFIX = (
+    "\n\n### RESPONSE FORMAT (STRICT)\n"
+    "Return ONLY the single JSON object defined in the system prompt. "
+    "No markdown, no code fences, no commentary, and no standalone words such as "
+    "'Safe', 'VULNERABLE', 'Yes' or 'No' outside the JSON. "
+    "Put the explanation in the description field, the exploit walkthrough in attack_scenario, "
+    "and the remediation in recommendation."
+)
+
 class Engine:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.llm_client = self._setup_llm_client()
+        self._setup_llm_client()  # sets self.llm_client and self.exploit_llm_client
         self.summaries = {}
         self.masvs_mapping = self._load_masvs_mapping()
         
@@ -53,27 +93,69 @@ class Engine:
         return result_dict
 
     def _setup_llm_client(self):
-        provider = self.settings.llm.provider
+        """Builds `self.llm_client` (scanning/analysis) and `self.exploit_llm_client`
+        (PoC generation). The two are the SAME object unless `llm.exploit_provider` or
+        `llm.exploit_model` is set AND exploit generation is actually requested — some
+        models refuse or silently return empty output for exploit/PoC generation while
+        being fine for vulnerability analysis (see Updatev1.3.0.md). Building the
+        exploit-specific client is skipped entirely when exploit generation is off, so a
+        typo'd `exploit_provider` never breaks a normal scan."""
+        if self.settings.analysis.use_cache:
+            log.info("Response cache: ENABLED 💾")
+
+        self.llm_client = self._build_llm_client(self.settings.llm.provider)
+        self.exploit_llm_client = self.llm_client
+
+        exploit_provider = self.settings.llm.exploit_provider
+        exploit_model = self.settings.llm.exploit_model
+        if self.settings.analysis.generate_exploit and (exploit_provider or exploit_model):
+            effective_provider = exploit_provider or self.settings.llm.provider
+            try:
+                self.exploit_llm_client = self._build_llm_client(effective_provider, model_override=exploit_model)
+                log.info(
+                    f"Exploit generation routed to provider '{effective_provider}'"
+                    + (f" (model override: {exploit_model})" if exploit_model else "")
+                )
+            except Exception as e:
+                log.warning(
+                    f"Failed to set up exploit_provider '{effective_provider}' ({e}); "
+                    "falling back to the main provider/model for exploit generation."
+                )
+                self.exploit_llm_client = self.llm_client
+
+    def _build_llm_client(self, provider: str, model_override: str = None):
+        """Builds a cached client for `provider`. `model_override` lets a secondary use
+        (exploit generation) pick a different model on that same provider than the one
+        used for scanning/analysis; when None, that provider's own default model field
+        is used (unchanged behavior)."""
         max_tokens = self.settings.llm.max_tokens  # [#6] Configurable output limit
 
         if provider == "ollama":
-            model = self.settings.llm.model
+            model = model_override or self.settings.llm.model
             raw_client = OllamaClient(model=model, url=self.settings.llm.ollama_url, max_tokens=max_tokens)
         elif provider == "gemini":
-            model = self.settings.llm.gemini_model
+            model = model_override or self.settings.llm.gemini_model
             raw_client = GeminiClient(model=model, api_key=self.settings.llm.gemini_api_key, max_tokens=max_tokens)
         elif provider == "groq":
-            model = self.settings.llm.groq_model
+            model = model_override or self.settings.llm.groq_model
             raw_client = GroqClient(model=model, api_key=self.settings.llm.groq_api_key, max_tokens=max_tokens)
         elif provider == "openai":
-            model = self.settings.llm.openai_model
+            model = model_override or self.settings.llm.openai_model
             raw_client = OpenAIClient(model=model, api_key=self.settings.llm.openai_api_key, max_tokens=max_tokens)
         elif provider == "anthropic":
-            model = self.settings.llm.anthropic_model
+            model = model_override or self.settings.llm.anthropic_model
             raw_client = AnthropicClient(model=model, api_key=self.settings.llm.anthropic_api_key, max_tokens=max_tokens)
         elif provider == "openrouter":
-            model = self.settings.llm.openrouter_model
+            model = model_override or self.settings.llm.openrouter_model
             raw_client = OpenRouterClient(model=model, api_key=self.settings.llm.openrouter_api_key, max_tokens=max_tokens)
+        elif provider == "router9":
+            model = model_override or self.settings.llm.router9_model
+            raw_client = Router9Client(
+                model=model,
+                api_key=self.settings.llm.router9_api_key,
+                base_url=self.settings.llm.router9_base_url,
+                max_tokens=max_tokens,
+            )
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
 
@@ -81,8 +163,6 @@ class Engine:
         # so mixing providers/models never collides.
         from core.llm_cache import CachedLLMClient
         cache_dir = "output/.dlh_cache"
-        if self.settings.analysis.use_cache:
-            log.info("Response cache: ENABLED 💾")
         return CachedLLMClient(raw_client, cache_dir, model=model, enabled=self.settings.analysis.use_cache)
 
     def get_status(self, result: dict) -> str:
@@ -166,6 +246,7 @@ class Engine:
                          "This file/rule was NOT verified — treat as unanalyzed, not clean.")
         return {
             "file": file_path,
+            "rule": rule_name,
             "vulnerability": vuln_name,
             "status": "Error",
             "result": {
@@ -175,6 +256,69 @@ class Engine:
                 "description": "Analysis could not be completed for this rule.",
             },
         }
+
+    def _dedupe_findings(self, results: list) -> list:
+        """
+        [#E] Collapse overlapping 'Vulnerable' findings on the same file so the report isn't
+        noisy. Two mechanisms, both INFORMATION-PRESERVING (merged findings are kept under
+        'also_detected_by', never dropped):
+          1. Family merge  — findings whose rules share a VULN_FAMILIES family (e.g. the
+             WebView trio) on the same file collapse into the highest-severity one.
+          2. Generic fold  — a GENERIC_RULES finding (universal_logic_flaw) on a file that
+             also has a specific finding is folded into that finding; if it is the only
+             finding on the file, it stays standalone.
+        Non-'Vulnerable' entries (Not Vulnerable / Error) pass through untouched.
+        """
+        from collections import defaultdict
+
+        def sev(r):
+            return _SEVERITY_ORDER.get(str((r.get("result") or {}).get("severity", "")).lower(), 0)
+
+        def brief(r):
+            res = r.get("result") or {}
+            return {
+                "rule": r.get("rule"),
+                "vulnerability": r.get("vulnerability"),
+                "severity": res.get("severity"),
+                "description": res.get("description"),
+            }
+
+        vulnerable = [r for r in results if str(r.get("status", "")).lower() == "vulnerable"]
+        passthrough = [r for r in results if str(r.get("status", "")).lower() != "vulnerable"]
+
+        by_file = defaultdict(list)
+        for r in vulnerable:
+            by_file[r.get("file")].append(r)
+
+        deduped = []
+        for _file, group in by_file.items():
+            # (1) family merge
+            fam_groups = defaultdict(list)
+            for r in group:
+                rule = r.get("rule") or r.get("vulnerability")
+                fam_groups[VULN_FAMILIES.get(rule, f"__self__:{rule}")].append(r)
+            merged = []
+            for _fam, items in fam_groups.items():
+                if len(items) == 1:
+                    merged.append(items[0])
+                    continue
+                primary = max(items, key=sev)
+                primary.setdefault("also_detected_by", [])
+                primary["also_detected_by"].extend(brief(o) for o in items if o is not primary)
+                merged.append(primary)
+
+            # (2) generic fold
+            generic = [m for m in merged if m.get("rule") in GENERIC_RULES]
+            specific = [m for m in merged if m.get("rule") not in GENERIC_RULES]
+            if generic and specific:
+                host = max(specific, key=sev)
+                host.setdefault("also_detected_by", [])
+                host["also_detected_by"].extend(brief(g) for g in generic)
+                deduped.extend(specific)
+            else:
+                deduped.extend(merged)
+
+        return passthrough + deduped
 
     def _find_manifest_path(self, start_path: str) -> str:
         """Traverses up the directory tree to find AndroidManifest.xml."""
@@ -271,6 +415,47 @@ class Engine:
         # If no package name extracted and not blocked, allow it.
         return True
 
+    def _detect_poc_extension(self, poc_content: str) -> str:
+        """Picks the file extension for a generated PoC/verification script.
+
+        The FIRST LINE is authoritative when it matches what `exploit_prompt.txt`
+        instructs the model to emit there (a shebang for Bash/Python; an opening
+        token for Frida JS/HTML) — checked BEFORE any whole-content substring scan.
+
+        Why: a Bash script may legitimately EMBED another language, e.g. a
+        `python3 - << 'EOF' ... EOF` heredoc, because Bash can't easily do things
+        like background logcat monitoring on its own. That embedded block contains
+        "import "/"def " just like standalone Python would. Scanning the WHOLE
+        content for those substrings (the old approach) misclassified such a script
+        as ".py" even though it starts with `#!/bin/bash` and is a single, valid,
+        directly-executable Bash script — the heredoc is an implementation detail,
+        not a second top-level script. The first line is what actually determines
+        how the file executes (the OS reads the shebang), so it must win.
+        """
+        first_line = poc_content.split("\n", 1)[0].strip()
+
+        if first_line.startswith("#!"):
+            if "python" in first_line:
+                return ".py"
+            if "bash" in first_line or first_line.endswith("sh"):
+                return ".sh"
+        elif first_line.startswith("Java.perform(") or first_line.startswith("setTimeout("):
+            return ".js"
+        elif first_line.lower().startswith(("<!doctype", "<html")):
+            return ".html"
+
+        # No (recognized) first-line signal -> fall back to content sniffing, for the
+        # rare case the model doesn't follow the "start with X" instruction.
+        if "Java.perform(" in poc_content or "Java.use(" in poc_content or "console.log(" in poc_content:
+            return ".js"
+        if "<html" in poc_content.lower() or "<script" in poc_content.lower() or "<!doctype" in poc_content.lower():
+            return ".html"
+        if "import " in poc_content or "def " in poc_content:
+            return ".py"
+        if "#!/bin/bash" in poc_content or "#!/bin/sh" in poc_content or "adb shell" in poc_content:
+            return ".sh"
+        return ".txt"
+
     def _generate_poc(self, file_path: str, code_snippet: str, vuln_description: str, rule_name: str, global_context: str = ""):
         """Generates a PoC script for a confirmed vulnerability."""
         try:
@@ -347,7 +532,7 @@ class Engine:
                 "file_path": file_path
             }
             
-            poc_content = self.llm_client.analyze_code("", context_wrapper_safe)
+            poc_content = self.exploit_llm_client.analyze_code("", context_wrapper_safe)
             
             if not poc_content:
                 log.warning("PoC generation returned empty.")
@@ -368,19 +553,8 @@ class Engine:
                 poc_content = _re.sub(r'\n?```\s*$', '', poc_content.strip())
                 poc_content = poc_content.strip()
 
-            # Determine extension based on cleaned content
-            ext = ".txt"
-            if "Java.perform" in poc_content or "Java.use" in poc_content or "console.log" in poc_content:
-                ext = ".js"
-            elif "#!/usr/bin/env python" in poc_content or ("import " in poc_content and "def " in poc_content):
-                ext = ".py"
-            elif "import " in poc_content or "def " in poc_content:
-                ext = ".py" 
-            elif "<html" in poc_content.lower() or "<script" in poc_content.lower() or "<!doctype" in poc_content.lower():
-                ext = ".html"
-            elif "#!/bin/bash" in poc_content or "#!/bin/sh" in poc_content or "adb shell" in poc_content:
-                ext = ".sh"
-            
+            ext = self._detect_poc_extension(poc_content)
+
             # Use the pre-calculated exploit directory from 'run' if available, otherwise fallback
             if hasattr(self, 'final_exploit_dir') and self.final_exploit_dir:
                  exploit_dir = self.final_exploit_dir
@@ -513,6 +687,50 @@ class Engine:
                 "false_positive_analysis": "Parsing failed."
             }
 
+    def _file_to_class_dotted(self, file_path: str):
+        """Best-effort fully-qualified (dotted) class name from a decompiled file path,
+        used to look up the component's AndroidManifest entry. Handles JADX (`.../sources/`)
+        and apktool (`.../smali/` or `.../smali_classesN/`) layouts."""
+        import re
+        p = str(file_path).replace("\\", "/")
+        rel = None
+        if "/sources/" in p:
+            rel = p.split("/sources/", 1)[1]
+        else:
+            m = re.search(r"/smali(?:_classes\d+)?/", p)
+            if m:
+                rel = p[m.end():]
+        if not rel:
+            return None
+        for ext in (".java", ".smali"):
+            if rel.endswith(ext):
+                rel = rel[: -len(ext)]
+                break
+        return rel.replace("/", ".") if rel else None
+
+    def _manifest_context_for(self, file_path: str) -> str:
+        """[B] Inject the component's AndroidManifest entry (exported status, permission,
+        intent-filters) into the LLM input so IPC/exported-dependent rules (intent_redirection,
+        pending_intent_hijacking, fragment_injection, …) do not have to GUESS reachability.
+        The parsing already exists in ManifestParser.get_component_details()."""
+        parser = getattr(self, "manifest_parser", None)
+        if parser is None:
+            return ""
+        cls = self._file_to_class_dotted(file_path)
+        if not cls:
+            return ""
+        try:
+            details = parser.get_component_details(cls)
+        except Exception:
+            return ""
+        if not details or not details.get("context_str"):
+            return ""
+        return (
+            "\n\n### COMPONENT CONTEXT (from AndroidManifest.xml)\n"
+            "Authoritative reachability facts for this class — use them, do NOT guess the exported status:\n"
+            + details["context_str"]
+        )
+
     def analyze_file(self, file_path, rules_to_run: list = None):
         results = []
         with open(file_path, "r", encoding="utf-8") as f:
@@ -559,6 +777,11 @@ class Engine:
         # [#5] Cap oversized content before it reaches the LLM.
         full_code_context = self._truncate_for_llm(full_code_context)
 
+        # [B] Reachability context from the manifest. Kept OUT of `full_code_context` so it
+        # doesn't affect per-rule pattern gating; appended only to what the LLM actually sees
+        # (it's small, so it survives after truncation).
+        llm_input = full_code_context + self._manifest_context_for(file_path)
+
         # [V1.1.7 Library Hunter - Exclusive Mode]
         # Logic: If this is a 3rd party library file, we run ONLY the specialized audit prompt.
         # This saves tokens by not running the 20+ standard rules on generic library code.
@@ -598,14 +821,14 @@ class Engine:
                  
                  context = {
                     "system_prompt": system_prompt,
-                    "vuln_prompt": prompt_data["prompt"],
+                    "vuln_prompt": prompt_data["prompt"] + JSON_ONLY_SUFFIX,
                     "file_path": file_path,
                     "expect_json": True  # [A] Rule analysis requires JSON output
                  }
 
                  # Run Analysis
                  try:
-                     raw_result = self.llm_client.analyze_code(full_code_context, context)
+                     raw_result = self.llm_client.analyze_code(llm_input, context)
 
                      # [FIX #2] A failed LLM call must not read as a clean library.
                      if self._is_failed_response(raw_result):
@@ -635,6 +858,7 @@ class Engine:
 
                          results.append({
                             "file": file_path,
+                            "rule": "library_vulnerability",
                             "vulnerability": "Library Hunter",
                             "status": status,
                             "result": parsed_result
@@ -648,7 +872,7 @@ class Engine:
              return results
 
         for rule_name, enabled in self.settings.rules.model_dump().items():
-            if enabled and rule_name not in ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack"]:
+            if enabled and rule_name not in DEDICATED_PASS_RULES:
                 if rules_to_run and rule_name not in rules_to_run:
                     continue
                 prompt_path = f"config/prompts/vuln_rules/{rule_name}.yaml"
@@ -676,24 +900,19 @@ class Engine:
                     system_prompt += f"Standard: \"{masvs_desc}\"\n"
                     system_prompt += f"Ensure your verification aligns strictly with this standard."
 
-                # --- DYNAMIC PROMPT ADAPTATION (Language Agnostic) ---
+                # [A] Rule prompts are language-agnostic ("Java or Smali"), so the old
+                # vuln_prompt.replace("smali","java") hack has been retired.
                 vuln_prompt = prompt_data["prompt"]
-                if file_path.endswith(".java"):
-                    # Improve prompt context by switching terminology
-                    # "Analyze this smali code..." -> "Analyze this java code..."
-                    # ```smali -> ```java
-                    vuln_prompt = vuln_prompt.replace("smali", "java")
-                    vuln_prompt = vuln_prompt.replace("Smali", "Java")
 
                 context = {
                     "system_prompt": system_prompt,
-                    "vuln_prompt": vuln_prompt,
+                    "vuln_prompt": vuln_prompt + JSON_ONLY_SUFFIX,
                     "file_path": file_path,
                     "expect_json": True  # [A] Rule analysis requires JSON output
                 }
 
-                # Pass the ENRICHED context
-                raw_result = self.llm_client.analyze_code(full_code_context, context)
+                # Pass the ENRICHED context (code + cross-ref + manifest reachability)
+                raw_result = self.llm_client.analyze_code(llm_input, context)
 
                 # [FIX #2] Distinguish a failed LLM call from a genuine "clean" verdict.
                 if self._is_failed_response(raw_result):
@@ -726,6 +945,7 @@ class Engine:
 
                 results.append({
                     "file": file_path,
+                    "rule": rule_name,
                     "vulnerability": prompt_data["name"],
                     "status": status,
                     "result": parsed_result # Store the full structured object
@@ -737,8 +957,7 @@ class Engine:
         with open(manifest_path, "r", encoding="utf-8") as f:
             code_snippet = f.read()
 
-        manifest_rules = ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack", "strandhogg"]
-        for rule_name in manifest_rules:
+        for rule_name in MANIFEST_RULES:
             if getattr(self.settings.rules, rule_name):
                 if rules_to_run and rule_name not in rules_to_run:
                     continue
@@ -748,7 +967,7 @@ class Engine:
 
                 context = {
                     "system_prompt": self._load_system_prompt(),
-                    "vuln_prompt": prompt_data["prompt"],
+                    "vuln_prompt": prompt_data["prompt"] + JSON_ONLY_SUFFIX,
                     "file_path": manifest_path,
                     "expect_json": True  # [A] Rule analysis requires JSON output
                 }
@@ -785,9 +1004,10 @@ class Engine:
 
                 results.append({
                     "file": manifest_path,
+                    "rule": rule_name,
                     "vulnerability": prompt_data["name"],
                     "status": status,
-                    "result": parsed_result 
+                    "result": parsed_result
                 })
         return results
 
@@ -830,7 +1050,7 @@ class Engine:
 
         context = {
             "system_prompt": self._load_system_prompt(),
-            "vuln_prompt": prompt_data["prompt"],
+            "vuln_prompt": prompt_data["prompt"] + JSON_ONLY_SUFFIX,
             "file_path": strings_path,
             "expect_json": True  # [A] Rule analysis requires JSON output
         }
@@ -863,9 +1083,10 @@ class Engine:
 
         results.append({
             "file": strings_path,
+            "rule": rule_name,
             "vulnerability": prompt_data["name"],
             "status": status,
-            "result": parsed_result 
+            "result": parsed_result
         })
         return results
 
@@ -939,6 +1160,39 @@ class Engine:
         log.success(f"Identified {len(risky_files)} risky files.")
         return risky_files
 
+    def _pattern_matched_files(self, files: list, patterns: list, app_package_name: str = "") -> list:
+        """First-party files whose content matches an enabled rule's detection_pattern.
+
+        A static pattern hit is a STRONG signal, so these files must reach the deep-scan
+        (where per-rule gating + the rule LLM decide the verdict) and must NOT be dropped
+        by the coarse LLM risk-triage. Layer-2 bug this fixes: ZipSlipActivity matched the
+        zip_slip pattern yet identify_risky_chunks judged it "not risky" and dropped it
+        before any rule ran. Scoped to the app package so the added deep-scan cost stays
+        bounded to first-party code (library files still go through the normal triage).
+        """
+        import re
+        compiled = []
+        for p in patterns:
+            try:
+                compiled.append(re.compile(p, re.IGNORECASE | re.DOTALL))
+            except re.error:
+                continue
+        if not compiled:
+            return []
+        pkg_frag = app_package_name.replace(".", os.sep) if app_package_name else None
+        hits = []
+        for f in files:
+            if pkg_frag and pkg_frag not in f:
+                continue  # only rescue first-party files from the risk-triage
+            try:
+                with open(f, "r", encoding="utf-8", errors="ignore") as fh:
+                    content = fh.read()
+            except OSError:
+                continue
+            if any(rx.search(content) for rx in compiled):
+                hits.append(f)
+        return hits
+
     def summarize_app(self, manifest_path: str, summaries: dict):
         log.info("Summarizing application capabilities...")
         
@@ -962,26 +1216,42 @@ class Engine:
         return app_summary
 
     def generate_attack_surface_map(self, manifest_path: str, summaries: dict):
+        """[v1.3.0] Returns a compact, structured INVENTORY dict (exported components,
+        deep links, network/IPC/file-io/deserialization/reflection signals, manifest
+        flags) — not a narrative report. A downstream tool (e.g. an HTML report) is
+        expected to render this into bullets/tables itself. Kept small on purpose:
+        the per-file vulnerability findings already carry the detailed explanations."""
         log.info("Generating attack surface map...")
-        
+
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = f.read()
-            
+
         summaries_text = "\n".join(f"- {file_path}: {summary}" for file_path, summary in summaries.items())
-        
+
         prompt = self._load_attack_surface_prompt().format(manifest=manifest, summaries=summaries_text)
         # Escape curly braces to prevent double formatting issues in analyze_code
         prompt = prompt.replace("{", "{{").replace("}", "}}")
-        
+
         context = {
             "system_prompt": "",
             "vuln_prompt": prompt,
-            "file_path": manifest_path
+            "file_path": manifest_path,
+            "expect_json": True  # force JSON mode on providers that support it (e.g. Ollama)
         }
-        
-        attack_surface_map = self.llm_client.analyze_code("", context)
+
+        raw_result = self.llm_client.analyze_code("", context)
+
+        if self._is_failed_response(raw_result):
+            log.warning("Attack surface map generation failed (empty LLM response).")
+            return {"error": "LLM call failed (empty response)"}
+
+        parsed = self._parse_llm_response(raw_result)
+        if parsed.get("_parse_failed"):
+            log.warning("Attack surface map response was not valid JSON.")
+            return {"error": "Unparseable LLM output", "raw": raw_result[:500]}
+
         log.success("Attack surface map generated.")
-        return attack_surface_map
+        return parsed
 
     def _find_smali_fallback(self, java_path: str, output_dir: str) -> str:
         """Helper to find corresponding smali file for a java file."""
@@ -1102,7 +1372,7 @@ class Engine:
             self.call_graph_builder = None
 
         smali_rules_enabled = any(
-            enabled and rule_name not in ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack"]
+            enabled and rule_name not in DEDICATED_PASS_RULES
             for rule_name, enabled in self.settings.rules.model_dump().items()
         )
 
@@ -1117,7 +1387,7 @@ class Engine:
             extra_keywords = []
             extra_regex = [] # [V1.2] Regex Support
             for rule_name, enabled in self.settings.rules.model_dump().items():
-                if enabled and rule_name not in ["webview_deeplink", "intent_spoofing", "exported_components", "deeplink_hijack", "strandhogg"]:
+                if enabled and rule_name not in DEDICATED_PASS_RULES:
                      try:
                         prompt_path = f"config/prompts/vuln_rules/{rule_name}.yaml"
                         with open(prompt_path, "r") as f:
@@ -1152,6 +1422,7 @@ class Engine:
                 try:
                     parser = ManifestParser(manifest_path)
                     app_package_name = parser.package_name
+                    self.manifest_parser = parser  # [B] reused by analyze_file for reachability context
                     log.info(f"Identified App Package: {app_package_name}")
                 except Exception as e:
                     log.warning(f"Failed to parse package name: {e}")
@@ -1286,11 +1557,23 @@ class Engine:
                  target_files = final_targets_for_summary
                  # No summarization logic for pure static, just pass to analyze
                  
-            elif filter_mode == "hybrid": 
+            elif filter_mode == "hybrid":
                 # Static found targets -> Summarize them -> Ask LLM
                 if final_targets_for_summary:
                     self.summaries = self.summarize_chunks(output_dir, file_list=final_targets_for_summary)
-                    target_files = self.identify_risky_chunks(self.summaries)
+                    llm_risky = self.identify_risky_chunks(self.summaries)
+                    # A first-party file that matches a rule's detection_pattern is a strong
+                    # static signal; deep-scan it even if the LLM risk-triage said "no" (it
+                    # dropped a real hit — ZipSlipActivity — before any rule could run).
+                    pattern_risky = self._pattern_matched_files(
+                        final_targets_for_summary, extra_regex, app_package_name
+                    )
+                    target_files = list(dict.fromkeys(llm_risky + pattern_risky))
+                    log.info(
+                        f"Deep-scan targets: {len(llm_risky)} via risk-triage + "
+                        f"{len(pattern_risky)} first-party static-pattern hits = "
+                        f"{len(target_files)} unique."
+                    )
                 else:
                     target_files = []
 
@@ -1340,6 +1623,9 @@ class Engine:
                     except Exception as exc:
                         log.error(f"{file_path} generated an exception: {exc}")
 
+        # [#E] Collapse overlapping same-file findings (info-preserving via 'also_detected_by').
+        all_results = self._dedupe_findings(all_results)
+
         final_report = {
             "app_summary": app_summary,
             "attack_surface_map": attack_surface_map,
@@ -1367,11 +1653,18 @@ class Engine:
                 f"See 'analysis_errors' in the report."
             )
 
-        # [#4] Report cache effectiveness.
+        # [#4] Report cache effectiveness. Merge in exploit_llm_client's own stats when it's
+        # a separate client (different exploit_provider/exploit_model) so the count is complete.
         if hasattr(self.llm_client, "cache_stats"):
             stats = self.llm_client.cache_stats()
-            if stats.get("enabled"):
-                log.info(f"Response cache: {stats['hits']} hit(s), {stats['misses']} miss(es).")
+            hits, misses, enabled = stats.get("hits", 0), stats.get("misses", 0), stats.get("enabled")
+            if self.exploit_llm_client is not self.llm_client and hasattr(self.exploit_llm_client, "cache_stats"):
+                exploit_stats = self.exploit_llm_client.cache_stats()
+                hits += exploit_stats.get("hits", 0)
+                misses += exploit_stats.get("misses", 0)
+                enabled = enabled or exploit_stats.get("enabled")
+            if enabled:
+                log.info(f"Response cache: {hits} hit(s), {misses} miss(es).")
 
     def _load_system_prompt(self) -> str:
         with open("config/prompts/system_prompt.txt", "r") as f:

@@ -6,7 +6,7 @@ class ManifestParser:
     def __init__(self, manifest_path: str):
         self.manifest_path = manifest_path
         self.root = self._parse_manifest()
-        self.package_name = self.root.get('package') if self.root else ""
+        self.package_name = self.root.get('package') if self.root is not None else ""
 
     def _parse_manifest(self):
         """Parses the XML file safely."""
@@ -26,7 +26,7 @@ class ManifestParser:
         and returns its details: Intent Filters, Permissions, Exported status.
         Handles partial names (e.g. '.MainActivity') and full names.
         """
-        if not self.root:
+        if self.root is None:
             return {}
 
         # Normalize component name (e.g. "com.example.MainActivity" -> ".MainActivity" suffix check)
@@ -67,13 +67,17 @@ class ManifestParser:
                      # Weak match, keep looking for stronger match but store this
                      current_best_match = node
 
-            if target_node:
+            # NOTE: an ElementTree Element with no children is falsy, so a component
+            # declared without child nodes (e.g. an <activity .../> with no intent-filter)
+            # must be compared with `is not None`, not truthiness — otherwise it reads as
+            # "not found" and this method wrongly returns {}.
+            if target_node is not None:
                 break
-        
-        if not target_node and current_best_match:
+
+        if target_node is None and current_best_match is not None:
             target_node = current_best_match
 
-        if not target_node:
+        if target_node is None:
             return {}
 
         # Extract Details

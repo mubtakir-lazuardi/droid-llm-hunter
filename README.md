@@ -16,6 +16,17 @@ Features **Auto-Exploit Generation**, transforming from a passive scanner into a
 **VulnerAppDLH** - a vulnerable Android application created specifically to test Droid-LLM-Hunter.
 **Link**: [VulnerAppDLH](https://github.com/roomkangali/VulnerAppDLH)
 
+### 📥 DLH Apk Fetcher
+
+**DLH Apk Fetcher** - a Python CLI tool for detecting Android devices connected via ADB, listing installed apps (name + version), showing currently running apps, searching packages, and downloading APKs into a structured local folder — preparing APK samples for security analysis with Droid-LLM-Hunter.
+**Link**: [dlh-apk-fetcher](https://github.com/roomkangali/dlh-apk-fetcher)
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Security-Android-green" />
+  <img src="https://img.shields.io/badge/Droid LLM Hunter-DLH-red" />
+  <img src="https://img.shields.io/badge/version-1.3.0-cyan" />
+</p>
+
 <p align="center">
   <img src="logo/dlh-logo.png" width="1000">
 </p>
@@ -85,7 +96,7 @@ Features **Auto-Exploit Generation**, transforming from a passive scanner into a
 
 ## ✨ Features
 
-Droid LLM Hunter combines static analysis with LLM intelligence to detect Android vulnerabilities with high precision. Key capabilities include Staged Prompt Architecture, Hybrid Filter Modes, Call Graph Context Injection, OWASP MASVS enrichment, and Auto-Exploit Generation across 6 LLM providers.
+Droid LLM Hunter combines static analysis with LLM intelligence to detect Android vulnerabilities with high precision. Key capabilities include Staged Prompt Architecture, Hybrid Filter Modes, Call Graph Context Injection, OWASP MASVS enrichment, and Auto-Exploit Generation across 7 LLM providers (including **9Router**, a self-hosted multi-provider router).
 
 → **[View Full Feature List](document/FEATURES.md)**
 
@@ -124,7 +135,7 @@ Multi-stage pipeline: **Decompilation → Scope Filter → Risk Identification �
 
 ## 🛡️ Available Rules
 
-25 vulnerability rules covering SQL Injection, WebView XSS, Hardcoded Secrets, Intent Spoofing, Path Traversal, Insecure Deserialization, and more — all mapped to OWASP MASVS.
+26 vulnerability rules covering SQL Injection, WebView XSS, Hardcoded Secrets, Intent Spoofing, **Intent Redirection**, Path Traversal, Insecure Deserialization, and more — all mapped to OWASP MASVS. A separate **Library Hunter** mode (`--scan-libraries`) adds supply-chain/backdoor detection.
 
 → **[View All Rules](document/RULES.md)**
 
@@ -136,7 +147,7 @@ Multi-stage pipeline: **Decompilation → Scope Filter → Risk Identification �
 |---------|---------|-------------|
 | `filter_mode` | `llm_only`, `static_only`, `hybrid` | `hybrid` |
 | `decompiler_mode` | `apktool`, `jadx`, `hybrid` | `hybrid` |
-| `provider` | `ollama`, `gemini`, `groq`, `openai`, `anthropic`, `openrouter` | `anthropic` / `gemini` |
+| `provider` | `ollama`, `gemini`, `groq`, `openai`, `anthropic`, `openrouter`, `router9` | `anthropic` |
 
 → **[View Full Configuration Guide](document/CONFIGURATION.md)**
 

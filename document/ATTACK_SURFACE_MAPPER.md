@@ -34,38 +34,40 @@ The engine executes the following logic pipeline:
     *   *Example Summary:* "This class handles credit card input and submits it to an API."
 
 3.  **Strategic Synthesis (LLM):**
-    *   The engine sends a prompt: *"Here is the list of open doors (Manifest). Here is what happens behind each door (Summaries). Map out the attack vectors."*
+    *   **[v1.3.0]** The engine sends a prompt asking for a compact **JSON inventory** — *not* a narrated report: *"Extract these attacker-relevant facts (exported components, deep links, network/IPC/file-io/deserialization/reflection signals, manifest flags) as a flat JSON object. No prose, no per-item impact commentary."* Per-item explanations were deliberately dropped from this feature — they duplicated what the detailed, per-file vulnerability findings already say (see [Scan Workflow](SCAN-WORKFLOW.md)). This map is a **recon-style inventory**, meant to be rendered into bullets/tables by a report layer (e.g. a dashboard), not read as prose itself.
 
 ---
 
 ## 📊 Example Output
 
-The JSON report will contain a section like this:
+**[v1.3.0]** `report["attack_surface_map"]` is a flat JSON object (engine-parsed via `Engine.generate_attack_surface_map`, not raw LLM text):
 
 ```json
-"attack_surface_map": [
-  {
-    "component": "com.example.DeepLinkHandlerActivity",
-    "type": "Activity",
-    "exposure": "Deep Link (myapp://reset-password)",
-    "description": "Handles password reset via URL parameters.",
-    "potential_attack": "The code summary indicates it reads 'token' param without validation. Attackers could craft a malicious link to reset victim passwords."
-  },
-  {
-    "component": "com.example.DataReceiver",
-    "type": "BroadcastReceiver",
-    "exposure": "Exported = True",
-    "description": "Processes incoming serialized objects.",
-    "potential_attack": "High risk of Deserialization Attack if an attacker sends a malicious Intent with a crafted parcelable."
-  }
-]
+"attack_surface_map": {
+  "exported_activities": ["MainActivity", "DeepLinkHandlerActivity"],
+  "exported_receivers": ["DataReceiver"],
+  "exported_services": [],
+  "exported_providers": [],
+  "deep_links": [
+    {"scheme": "myapp", "host": "reset-password", "handler": "DeepLinkHandlerActivity"}
+  ],
+  "unprotected_broadcasts": [],
+  "network": ["http"],
+  "file_io": false,
+  "ipc": true,
+  "deserialization": true,
+  "reflection": false,
+  "manifest_flags": {"debuggable": false, "allow_backup": true}
+}
 ```
+
+On a failed/unparseable LLM response, this field is `{"error": "..."}` instead of being silently empty or `null` — a failure is never presented as a clean/empty inventory.
 
 ## ✅ Why Use This?
 
-1.  **Prioritization:** Auditors can stop wasting time on internal utility classes and focus immediately on the "Public Interface" of the app.
-2.  **Context-Aware Risk:** A vulnerability in an *Exported* component is **Critical**. The same vulnerability in a private component is often just *Medium* or *Low*. This map highlights the Criticals.
-3.  **Red Teaming Ready:** Provides an instant checklist for penetration testing (e.g., "Try sending Intent X to Component Y").
+1.  **Prioritization:** Auditors can stop wasting time on internal utility classes and focus immediately on the "Public Interface" of the app — the `exported_*` and `deep_links` arrays name it directly.
+2.  **Context-Aware Risk:** A vulnerability in an *Exported* component is **Critical**. The same vulnerability in a private component is often just *Medium* or *Low*. Cross-reference this inventory against the per-file findings to see which vulnerable files are actually exposed.
+3.  **Red Teaming Ready:** The `deep_links` array (scheme/host/handler) and `ipc`/`file_io`/`deserialization`/`reflection` signals give an instant recon checklist — e.g. "try sending a crafted Intent to `DataReceiver`, deserialization is in play here."
 
 ## ⚙️ How to Enable
 
