@@ -444,16 +444,7 @@ def test_attack_surface_map_reports_error_on_unparseable_response(tmp_path):
     assert "is_vulnerable" not in result  # must NOT leak the vuln-verdict fallback shape
 
 
-# ---- 9Router client: SSE stream parsing -----------------------------------------
-class _FakeSSEResponse:
-    """Mimics requests.Response.iter_lines() for a 9Router-style SSE stream."""
-    def __init__(self, lines):
-        self._lines = lines
-
-    def iter_lines(self, decode_unicode=True):
-        return iter(self._lines)
-
-
+# ---- 9Router client: response body parsing ---------------------------------------
 def _router9():
     return Router9Client(model="gc/gemini-2.5-pro", api_key="k", base_url="http://x/v1/chat/completions")
 
@@ -463,7 +454,7 @@ def test_router9_parses_real_world_sse_stream():
     (chat.completion.chunk objects, role-only first delta, content delta, then a
     finish_reason chunk with usage) — no `stream:true` was even requested."""
     r9 = _router9()
-    lines = [
+    body = "\n".join([
         '',
         'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"gemini-2.5-pro","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}',
         '',
@@ -471,25 +462,48 @@ def test_router9_parses_real_world_sse_stream():
         'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"gemini-2.5-pro","choices":[{"index":0,"delta":{"content":"9Router!"},"finish_reason":null}]}',
         'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"gemini-2.5-pro","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}',
         'data: [DONE]',
-    ]
-    assert r9._parse_sse_stream(_FakeSSEResponse(lines)) == "Hello 9Router!"
+    ])
+    assert r9._extract_content(body) == "Hello 9Router!"
 
 
 def test_router9_sse_stream_stops_at_done_and_skips_malformed():
     r9 = _router9()
-    lines = [
+    body = "\n".join([
         'data: {"choices":[{"delta":{"content":"A"}}]}',
         'data: not-json-garbage',
         'data: {"choices":[{"delta":{"content":"B"}}]}',
         'data: [DONE]',
         'data: {"choices":[{"delta":{"content":"C-should-not-appear"}}]}',
-    ]
-    assert r9._parse_sse_stream(_FakeSSEResponse(lines)) == "AB"
+    ])
+    assert r9._extract_content(body) == "AB"
 
 
 def test_router9_sse_stream_empty_on_no_data_lines():
     r9 = _router9()
-    assert r9._parse_sse_stream(_FakeSSEResponse(["", "not an sse line"])) == ""
+    assert r9._extract_content("\n".join(["", "not an sse line"])) == ""
+
+
+def test_router9_extracts_plain_json_mislabeled_as_event_stream():
+    """Regression: 9Router has been observed sending `Content-Type: text/event-stream`
+    while the actual body is a single complete `chat.completion` JSON object glued
+    directly to a trailing `data: [DONE]` with NO separating newline. Since that blob
+    never starts with `data:`, the old line-based SSE parser silently dropped it and
+    every single 9Router call returned empty content — this is the exact shape that
+    triggered '9Router API returned empty response' during real scans."""
+    r9 = _router9()
+    body = (
+        '{"id":"chatcmpl-1","object":"chat.completion","created":1,"model":"cbcn-glm-5.2",'
+        '"choices":[{"index":0,"message":{"role":"assistant","content":"Hello!"},'
+        '"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}'
+        'data: [DONE]\n\n'
+    )
+    assert r9._extract_content(body) == "Hello!"
+
+
+def test_router9_extracts_plain_json_without_trailing_garbage():
+    r9 = _router9()
+    body = '{"choices":[{"message":{"content":"plain response"}}]}'
+    assert r9._extract_content(body) == "plain response"
 
 
 def test_router9_construct_prompt_survives_braces_in_code():

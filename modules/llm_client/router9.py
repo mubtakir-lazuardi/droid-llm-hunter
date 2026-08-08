@@ -15,9 +15,16 @@ class Router9Client(BaseLLMClient):
     Unlike those other OpenAI-compatible clients, 9Router's /v1/chat/completions endpoint
     was observed to return a Server-Sent Events (SSE) stream even for a plain request with
     no `"stream"` key set — responses arrive as `data: {...}` chunks with `chat.completion.chunk`
-    objects and per-token `delta.content` fragments, not a single JSON body. This client
-    detects that via the `Content-Type` response header and parses accordingly, falling
-    back to a normal single-JSON response if the router ever returns one instead.
+    objects and per-token `delta.content` fragments, not a single JSON body.
+
+    However, the `Content-Type: text/event-stream` header is NOT a reliable signal of the
+    actual body shape: 9Router has been observed sending `text/event-stream` while the body
+    is a single complete (non-chunked) `chat.completion` JSON object glued directly to a
+    trailing `data: [DONE]` with no separating newline, e.g.
+    `{"id":...,"choices":[{"message":{"content":"..."}}]}data: [DONE]\n\n`. Since that blob
+    never starts with `data:`, a naive SSE line-parser silently drops it and returns empty
+    content on every single call. This client therefore ignores the header and instead
+    sniffs the response body itself to decide whether it's SSE or a plain JSON object.
     """
 
     def __init__(self, model: str, api_key: str, base_url: str, max_tokens: int = 4096):
@@ -65,16 +72,8 @@ class Router9Client(BaseLLMClient):
 
                     response.raise_for_status()
 
-                    content_type = response.headers.get("Content-Type", "")
-                    if "text/event-stream" in content_type:
-                        content = self._parse_sse_stream(response)
-                    else:
-                        result = response.json()
-                        if "error" in result:
-                            log.error(f"9Router API returned error: {result['error']}")
-                            raise requests.exceptions.RequestException(f"9Router API Error: {result['error']}")
-                        choices = result.get("choices") or []
-                        content = choices[0]["message"]["content"] if choices else ""
+                    body = response.text
+                    content = self._extract_content(body)
                 if content:
                     log.success("Received analysis from 9Router.")
                 return content
@@ -86,11 +85,21 @@ class Router9Client(BaseLLMClient):
         log.error(f"9Router API failed after {max_retries} attempts.")
         return ""
 
-    def _parse_sse_stream(self, response) -> str:
+    def _extract_content(self, body: str) -> str:
+        """Sniffs the response body to tell an SSE stream apart from a plain JSON object
+        (the `Content-Type` header can't be trusted to say which one it actually is —
+        see class docstring)."""
+        stripped = body.lstrip()
+        if stripped.startswith("data:"):
+            return self._parse_sse_stream(stripped)
+        return self._parse_plain_json(stripped)
+
+    def _parse_sse_stream(self, body: str) -> str:
         """Accumulates `delta.content` fragments from an OpenAI-style SSE stream
         (`data: {...}` lines, terminated by `data: [DONE]`)."""
         chunks = []
-        for raw_line in response.iter_lines(decode_unicode=True):
+        for raw_line in body.splitlines():
+            raw_line = raw_line.strip()
             if not raw_line or not raw_line.startswith("data:"):
                 continue
             payload = raw_line[len("data:"):].strip()
@@ -111,6 +120,21 @@ class Router9Client(BaseLLMClient):
             if piece:
                 chunks.append(piece)
         return "".join(chunks)
+
+    def _parse_plain_json(self, body: str) -> str:
+        """Parses a single `chat.completion` JSON object, tolerating trailing garbage
+        (9Router has been observed appending a stray `data: [DONE]` directly after the
+        JSON with no separator)."""
+        try:
+            result, _ = json.JSONDecoder().raw_decode(body)
+        except json.JSONDecodeError as e:
+            log.error(f"9Router returned unparseable response: {e}")
+            return ""
+        if "error" in result:
+            log.error(f"9Router API returned error: {result['error']}")
+            raise requests.exceptions.RequestException(f"9Router API Error: {result['error']}")
+        choices = result.get("choices") or []
+        return choices[0]["message"]["content"] if choices else ""
 
     def _construct_prompt(self, code_snippet: str, context: Dict[str, Any]) -> str:
         system_prompt = context.get("system_prompt", "")
