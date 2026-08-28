@@ -27,6 +27,16 @@ class LLMSettings(BaseModel):
     router9_model: Optional[str] = None
     router9_api_key: Optional[str] = None
     router9_base_url: Optional[str] = "http://localhost:20128/v1/chat/completions"
+    # Codex CLI (local agent binary, NOT an HTTP API — so no api_key here; auth comes from
+    # the local `codex login`). Model is optional: unset means "use whatever
+    # ~/.codex/config.toml already selects".
+    codex_model: Optional[str] = None
+    codex_cli_path: Optional[str] = "codex"
+    codex_timeout: int = 300                 # seconds per call; agent turns are slower than a plain API call
+    codex_sandbox: Optional[str] = "read-only"   # read-only | workspace-write | danger-full-access
+    # none|low|medium|high|xhigh|max|ultra (the accepted set is model-dependent — verified
+    # live against gpt-daybreak-blue-latest, which rejects "minimal"). None -> Codex default.
+    codex_reasoning_effort: Optional[str] = None
     max_tokens: int = 4096  # [#6] Max output tokens per LLM call (avoid truncated JSON/exploit)
     # [v1.3.0] Route --generate-exploit to a DIFFERENT provider/model than scanning.
     # Some models refuse or silently return empty output for exploit/PoC generation

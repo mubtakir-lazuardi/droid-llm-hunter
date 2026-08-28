@@ -115,6 +115,78 @@ def test_cache_resume_across_new_wrapper(tmp_path):
     assert fake2.calls == 0  # served from disk cache written by the first wrapper
 
 
+def test_cache_key_includes_client_fingerprint(tmp_path):
+    """Regression: settings that change the ANSWER but never appear in the prompt must be
+    part of the cache key. Confirmed live before the fix: a run at reasoning_effort=low
+    followed by one at xhigh hit the cached low answer and never called the model at
+    xhigh — silently returning shallower analysis than the user asked for."""
+    class _Fp:
+        def __init__(self, fp):
+            self.fp = fp
+            self.calls = 0
+
+        def cache_fingerprint(self):
+            return self.fp
+
+        def analyze_code(self, code, ctx):
+            self.calls += 1
+            return f"R:{self.fp}"
+
+    d = str(tmp_path / "c")
+    ctx = {"system_prompt": "s", "vuln_prompt": "v"}
+    low, high = _Fp("reasoning_effort=low"), _Fp("reasoning_effort=xhigh")
+    assert CachedLLMClient(low, d, model="m", enabled=True).analyze_code("x", ctx) == "R:reasoning_effort=low"
+    # Different fingerprint -> must MISS and actually call the client, not reuse `low`.
+    assert CachedLLMClient(high, d, model="m", enabled=True).analyze_code("x", ctx) == "R:reasoning_effort=xhigh"
+    assert high.calls == 1
+    # Same fingerprint -> still hits, i.e. caching is not simply broken.
+    again = _Fp("reasoning_effort=low")
+    assert CachedLLMClient(again, d, model="m", enabled=True).analyze_code("x", ctx) == "R:reasoning_effort=low"
+    assert again.calls == 0
+
+
+def test_empty_fingerprint_keeps_legacy_cache_keys(tmp_path):
+    """An empty fingerprint must be skipped entirely, so upgrading does not invalidate
+    the on-disk cache of providers that don't expose one (every HTTP client today)."""
+    import hashlib
+
+    def legacy_key(model, ctx, code):
+        h = hashlib.sha256()
+        for part in (model, ctx.get("system_prompt", ""), ctx.get("vuln_prompt", ""), code):
+            h.update(part.encode("utf-8", errors="replace"))
+            h.update(b"\x00")
+        return h.hexdigest()
+
+    ctx = {"system_prompt": "s", "vuln_prompt": "v"}
+    d = str(tmp_path / "c")
+    # no cache_fingerprint at all (all existing clients + test fakes)
+    assert CachedLLMClient(_FakeClient(), d, model="m", enabled=True)._key("x", ctx) == legacy_key("m", ctx, "x")
+
+    class _Empty(_FakeClient):
+        def cache_fingerprint(self):
+            return ""
+
+    assert CachedLLMClient(_Empty(), d, model="m", enabled=True)._key("x", ctx) == legacy_key("m", ctx, "x")
+
+
+def test_fingerprint_failure_is_soft(tmp_path):
+    """A client whose fingerprint raises must not take the scan down with it."""
+    class _Boom(_FakeClient):
+        def cache_fingerprint(self):
+            raise RuntimeError("boom")
+
+    cc = CachedLLMClient(_Boom(), str(tmp_path / "c"), model="m", enabled=True)
+    assert cc.analyze_code("x", {"system_prompt": "s", "vuln_prompt": "v"}) == "R:x"
+
+
+def test_codex_fingerprint_tracks_reasoning_effort():
+    """Unpinned effort -> empty fingerprint (the effective value lives in
+    ~/.codex/config.toml and is invisible here), pinned -> it keys the cache."""
+    assert _codex().cache_fingerprint() == ""
+    assert _codex(reasoning_effort="xhigh").cache_fingerprint() == "reasoning_effort=xhigh"
+    assert _codex(reasoning_effort="low").cache_fingerprint() != _codex(reasoning_effort="high").cache_fingerprint()
+
+
 def test_cache_disabled_bypasses(tmp_path):
     fake = _FakeClient()
     cc = CachedLLMClient(fake, str(tmp_path / "c"), model="m", enabled=False)
@@ -333,6 +405,8 @@ def _llm_settings(**overrides):
         anthropic_model="claude-opus-4-6", anthropic_api_key="a",
         openrouter_model="moonshotai/kimi-k3", openrouter_api_key="or",
         router9_model="gc/gemini-2.5-pro", router9_api_key="r9", router9_base_url="http://localhost:20128/v1/chat/completions",
+        codex_model=None, codex_cli_path="codex", codex_timeout=600,
+        codex_sandbox="read-only", codex_reasoning_effort=None,
         max_tokens=4096, exploit_provider=None, exploit_model=None,
     )
     base.update(overrides)
@@ -511,6 +585,54 @@ def test_router9_construct_prompt_survives_braces_in_code():
     only on stray braces in the TEMPLATE (already covered by test_json_only_suffix_is_format_safe)."""
     r9 = _router9()
     prompt = r9._construct_prompt(
+        "if (a) { b(); }",
+        {"system_prompt": "SYS", "vuln_prompt": "Analyze {code_snippet} at {file_path}", "file_path": "F.java"},
+    )
+    assert "if (a) { b(); }" in prompt and "F.java" in prompt and prompt.startswith("SYS")
+
+
+# ---- Codex CLI client (local agent subprocess, not an HTTP API) -------------------
+def _codex(**kw):
+    from modules.llm_client.codex import CodexClient
+    return CodexClient(**kw)
+
+
+def test_codex_command_uses_output_last_message_and_stdin():
+    """`codex exec` prints a banner, session id, echoed prompt and a token-usage footer
+    to stdout, so the response MUST come from --output-last-message (which holds only the
+    agent's final message), and the prompt MUST go over stdin (trailing '-') so a large
+    decompiled-code prompt can't blow ARG_MAX."""
+    cmd = _codex()._build_command("/tmp/out.txt", "/tmp/wd")
+    assert cmd[:2] == ["codex", "exec"]
+    assert "--output-last-message" in cmd
+    assert cmd[cmd.index("--output-last-message") + 1] == "/tmp/out.txt"
+    assert cmd[-1] == "-"                       # read prompt from stdin
+    assert "--cd" in cmd and cmd[cmd.index("--cd") + 1] == "/tmp/wd"
+    # read-only: the snippet is already inlined in the prompt, the agent must not write.
+    assert cmd[cmd.index("--sandbox") + 1] == "read-only"
+    assert "--skip-git-repo-check" in cmd and "--ephemeral" in cmd
+
+
+def test_codex_command_model_and_reasoning_are_opt_in():
+    """No model pinned -> no -m flag at all, so Codex falls back to its own config."""
+    assert "-m" not in _codex()._build_command("/o", "/w")
+    cmd = _codex(model="gpt-5.6-codex", reasoning_effort="high")._build_command("/o", "/w")
+    assert cmd[cmd.index("-m") + 1] == "gpt-5.6-codex"
+    assert "model_reasoning_effort=high" in cmd
+
+
+def test_codex_missing_binary_soft_fails(monkeypatch):
+    """A missing CLI must not crash the scan — same soft-fail contract as the HTTP clients."""
+    import modules.llm_client.codex as codex_mod
+    monkeypatch.setattr(codex_mod.shutil, "which", lambda _: None)
+    out = _codex()._construct_prompt("x", {"system_prompt": "S", "vuln_prompt": "P"})
+    assert out.startswith("S")
+    assert _codex().analyze_code("code", {"system_prompt": "S", "vuln_prompt": "P"}) == ""
+
+
+def test_codex_construct_prompt_survives_braces_in_code():
+    """Decompiled Java/Kotlin is full of braces; .replace() (not .format()) must be used."""
+    prompt = _codex()._construct_prompt(
         "if (a) { b(); }",
         {"system_prompt": "SYS", "vuln_prompt": "Analyze {code_snippet} at {file_path}", "file_path": "F.java"},
     )

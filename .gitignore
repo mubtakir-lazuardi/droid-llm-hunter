@@ -26,7 +26,6 @@ coverage.xml
 output/
 *.apk
 *.log
-banner.txt
 
 # Mac/Linux
 .DS_Store

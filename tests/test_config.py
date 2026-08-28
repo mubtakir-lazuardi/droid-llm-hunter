@@ -72,6 +72,19 @@ def test_router9_provider_fields_exist():
         assert field in LLMSettings.model_fields
 
 
+def test_codex_provider_fields_exist():
+    # Codex is a LOCAL CLI agent, not an HTTP API: it authenticates via `codex login`,
+    # so there is deliberately no codex_api_key field. codex_model is optional because
+    # an unset model means "use whatever ~/.codex/config.toml already selects".
+    for field in ("codex_model", "codex_cli_path", "codex_timeout",
+                  "codex_sandbox", "codex_reasoning_effort"):
+        assert field in LLMSettings.model_fields
+    assert "codex_api_key" not in LLMSettings.model_fields
+    assert LLMSettings.model_fields["codex_model"].default is None
+    assert LLMSettings.model_fields["codex_cli_path"].default == "codex"
+    assert LLMSettings.model_fields["codex_sandbox"].default == "read-only"
+
+
 def test_new_v120_settings_exist():
     for field in ("max_workers", "use_cache", "max_input_chars"):
         assert field in __import__("core.config_loader", fromlist=["AnalysisSettings"]).AnalysisSettings.model_fields
