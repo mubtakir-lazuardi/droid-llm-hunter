@@ -166,6 +166,7 @@ def set_model(model: str = typer.Argument(None, help="The LLM model to use.")):
         "anthropic": "anthropic_model",
         "openrouter": "openrouter_model",
         "router9": "router9_model",
+        "codex": "codex_model",
     }
     
     if model is None:
@@ -391,7 +392,7 @@ def config_wizard():
     
     print("Welcome to the Droid LLM Hunter configuration wizard!")
     
-    provider = typer.prompt("Select LLM provider (ollama, gemini, groq, openai, anthropic, openrouter, router9)")
+    provider = typer.prompt("Select LLM provider (ollama, gemini, groq, openai, anthropic, openrouter, router9, codex)")
     
     if provider == "ollama":
         model = typer.prompt("Enter Ollama model name")
@@ -468,8 +469,22 @@ def config_wizard():
                 "router9_base_url": router9_base_url
             }
         }
+    elif provider == "codex":
+        # No API key prompt: Codex CLI authenticates itself via `codex login`.
+        codex_model = typer.prompt(
+            "Enter Codex model name (blank = use ~/.codex/config.toml default)",
+            default="", show_default=False
+        )
+        codex_cli_path = typer.prompt("Path to Codex CLI binary", default="codex")
+        settings = {
+            "llm": {
+                "provider": provider,
+                "codex_model": codex_model or None,
+                "codex_cli_path": codex_cli_path
+            }
+        }
     else:
-        print(f"Invalid provider '{provider}'. Choose from: ollama, gemini, groq, openai, anthropic, openrouter, router9")
+        print(f"Invalid provider '{provider}'. Choose from: ollama, gemini, groq, openai, anthropic, openrouter, router9, codex")
         raise typer.Exit()
 
     try:

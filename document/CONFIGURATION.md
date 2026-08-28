@@ -107,7 +107,7 @@ Droid LLM Hunter supports dual decompilation to balance reliability and analysis
 
 ## LLM Providers
 
-Supported `llm.provider` values: `ollama`, `gemini`, `groq`, `openai`, `anthropic`, `openrouter`, `router9`.
+Supported `llm.provider` values: `ollama`, `gemini`, `groq`, `openai`, `anthropic`, `openrouter`, `router9`, `codex`.
 
 ### 9Router (`router9`)
 
@@ -122,8 +122,33 @@ llm:
 ```
 
 - **`router9_base_url` is configurable** (unlike the other clients, which hit a fixed public URL) since 9Router is self-hosted — host/port vary per install.
-- **Streaming quirk:** 9Router's `/v1/chat/completions` endpoint was observed to return a **Server-Sent Events (SSE) stream** (`Content-Type: text/event-stream`, `data: {...}` chunks) even for a plain, non-streaming request. The client (`modules/llm_client/router9.py`) detects this via the response's `Content-Type` header and parses the SSE chunks accordingly, falling back to a normal single-JSON response if the router ever returns one instead.
+- **Streaming quirk:** 9Router's `/v1/chat/completions` endpoint was observed to return a **Server-Sent Events (SSE) stream** (`Content-Type: text/event-stream`, `data: {...}` chunks) even for a plain, non-streaming request. It was *also* observed sending that same `text/event-stream` header while the body is actually a single complete `chat.completion` JSON object glued directly to a trailing `data: [DONE]` with **no separating newline** — a shape that a naive line-based SSE parser silently drops, making every call return empty content. The client (`modules/llm_client/router9.py`) therefore ignores the `Content-Type` header entirely and **sniffs the response body**: bodies starting with `data:` are parsed as SSE, anything else is parsed as one JSON object (tolerating the stray trailing `data: [DONE]`).
 - **Reasoning models eat into `max_tokens`:** routing to a reasoning-capable model (e.g. `gemini-2.5-pro`) burns part of the `max_tokens` budget on hidden `reasoning_tokens` before any visible output is produced. A too-low `max_tokens` can silently truncate the answer (`finish_reason: "length"`) — this was confirmed live against a real 9Router instance during testing. If responses look cut off, raise `llm.max_tokens` (same guidance as OpenRouter's `kimi-k3`, which needs `8192`).
+
+### Codex CLI (`codex`)
+
+The only provider that is **not an HTTP API**. [Codex CLI](https://developers.openai.com/codex/cli) is a locally installed agent binary, so instead of calling an endpoint the client (`modules/llm_client/codex.py`) shells out to `codex exec` — its non-interactive mode — and reads the agent's final message back.
+
+```yaml
+llm:
+  provider: codex
+  codex_model: gpt-daybreak-blue-latest   # pin explicitly (see the cache caveat below)
+  codex_cli_path: codex      # must be on PATH, or give an absolute path
+  codex_timeout: 300         # seconds per call (agent turns are slower than a plain API call)
+  codex_sandbox: read-only   # read-only | workspace-write | danger-full-access
+  codex_reasoning_effort: medium   # none|low|medium|high|xhigh|max|ultra (model-dependent)
+```
+
+- **No API key.** There is deliberately no `codex_api_key` setting: auth is whatever the local install already uses. Run `codex login` once (ChatGPT account or API key) and DLH picks it up. Verify with `codex login status`.
+- **Pin `codex_model` — don't leave it `null`.** `null` inherits the `model` from `~/.codex/config.toml`, which is convenient but has a **cache trap**: the response cache keys on the model name, and an unpinned Codex client falls back to the constant label `codex:default`. Change the model in your global Codex config and the cache key does *not* change, so DLH silently reuses answers produced by the **old** model. Pinning the model here makes a model switch invalidate the cache correctly, and keeps scans reproducible (which matters — recall is model-sensitive).
+- **Which model?** `codex exec -m <slug>` accepts any model your Codex account can use. `gpt-daybreak-blue-latest` is the one Codex itself describes as *"for broad defensive cybersecurity work"*, making it the natural default for vulnerability analysis; the other listed models are general-purpose agentic coding models.
+- **Reasoning effort is model-dependent.** Verified live against `gpt-daybreak-blue-latest`: `none`, `low`, `medium`, `high`, `xhigh`, `max`, and `ultra` are accepted, while `minimal` is rejected — despite `minimal` appearing in the API's own enum error message. Check `~/.codex/models_cache.json` (`supported_reasoning_levels`) for other models. In practice `low`/`none` produce shallow verdicts, while `medium` and above actually identify the tainted source; raise to `high`/`xhigh` for a final audit.
+- **Changing the effort invalidates the cache (as it should).** `reasoning_effort` changes the answer but never appears in the prompt, so the Codex client reports it to the response cache via `cache_fingerprint()` and it forms part of the cache key. Before this was wired up, a run at `low` followed by a run at `xhigh` returned the cached `low` answer and never called the model at `xhigh` — silently giving shallower analysis than requested. Note the fingerprint is empty when `codex_reasoning_effort` is `null`, because the effective value then comes from `~/.codex/config.toml`, which DLH cannot see: another reason to pin it here.
+- **Why `read-only` is the right sandbox.** The code being analyzed is already fully inlined in the prompt, so the agent has no reason to write anything. Raising this to `workspace-write` / `danger-full-access` lets a model-generated command modify your machine — don't, unless you have a specific reason.
+- **Deterministic context.** Each call runs in a **fresh empty temp directory** (`--cd`). Codex is an *agent* and will explore its working directory if given one, so pointing it at an empty dir keeps analysis reproducible and stops unrelated local files from being pulled into the model context.
+- **Output capture.** `codex exec` prints a banner, session id, the echoed prompt and a token-usage footer to stdout, so the client uses `--output-last-message` (which writes *only* the agent's final message) rather than scraping stdout. The prompt is piped on **stdin**, so large decompiled-code prompts can't hit the `ARG_MAX` argv limit.
+- **`max_tokens` does not apply.** The Codex CLI manages its own output budget and exposes no per-call output-limit flag, so `llm.max_tokens` is accepted for interface parity but has no effect on this provider.
+- **Concurrency is safe.** Each call gets its own temp dir and last-message file, so `analysis.max_workers > 1` runs parallel `codex exec` processes without racing (verified live with concurrent calls).
 
 ### Routing `--generate-exploit` to a different provider (`exploit_provider` / `exploit_model`)
 

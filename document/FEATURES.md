@@ -47,7 +47,7 @@
 
 - **🛠️ Flexible Configuration:** A simple yet powerful configuration file (`config/settings.yaml`) allows for easy management of LLM providers, models, rules, and **Decompiler Settings** (Apktool/JADX).
 
-- **🤖 Multi-Provider Support:** Run locally with **Ollama** (free & private) or scale up with **Gemini**, **Groq**, **OpenAI**, **Anthropic**, **OpenRouter**, and **9Router** (a self-hosted, OpenAI-compatible router that fans out to many providers/models behind one endpoint).
+- **🤖 Multi-Provider Support:** Run locally with **Ollama** (free & private) or scale up with **Gemini**, **Groq**, **OpenAI**, **Anthropic**, **OpenRouter**, **9Router** (a self-hosted, OpenAI-compatible router that fans out to many providers/models behind one endpoint), and **Codex CLI** (a locally installed agent binary — no API key needed, it reuses your existing `codex login`).
 
 - **💾 Response Cache & Resume:** Every successful LLM response is cached (content-addressed by model + prompt + code). A scan interrupted by a crash or rate limit **resumes for free** on re-run — only unfinished work calls the LLM. Configurable parallelism (`max_workers`), input truncation (`max_input_chars`), and output limit (`max_tokens`) round out the cost controls. [Read the Docs](CONFIGURATION.md#performance--cost-controls)
 

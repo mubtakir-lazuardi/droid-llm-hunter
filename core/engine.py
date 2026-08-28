@@ -10,6 +10,7 @@ from modules.llm_client.openai import OpenAIClient
 from modules.llm_client.anthropic import AnthropicClient
 from modules.llm_client.openrouter import OpenRouterClient
 from modules.llm_client.router9 import Router9Client
+from modules.llm_client.codex import CodexClient
 from core.call_graph import CallGraphBuilder
 from core.manifest_parser import ManifestParser
 import os
@@ -156,6 +157,22 @@ class Engine:
                 base_url=self.settings.llm.router9_base_url,
                 max_tokens=max_tokens,
             )
+        elif provider == "codex":
+            # Local CLI agent, not an HTTP API: no api_key, and `model` may legitimately
+            # be None (Codex then uses whatever ~/.codex/config.toml selects).
+            model = model_override or self.settings.llm.codex_model
+            raw_client = CodexClient(
+                model=model,
+                cli_path=self.settings.llm.codex_cli_path or "codex",
+                max_tokens=max_tokens,
+                timeout=self.settings.llm.codex_timeout,
+                sandbox=self.settings.llm.codex_sandbox or "read-only",
+                reasoning_effort=self.settings.llm.codex_reasoning_effort,
+            )
+            # The client keeps model=None (so Codex picks its own default), but the cache
+            # key must not be the empty string — that would collide with any other
+            # unset-model provider. Label it distinctly for cache purposes only.
+            model = model or "codex:default"
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
 
